@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Videos Collection: Anyone can read, anyone can write/manage videos for this app
+    match /videos/{videoId} {
+      allow read, write: if true;
+    }
+
+    // Config Collection: Anyone can read settings & ads, admin can update
+    match /config/{configId} {
+      allow read, write: if true;
+    }
+
+    // Analytics Collection: Track video views and traffic
+    match /analytics/{analyticsId} {
+      allow read, write: if true;
+    }
+  }
+}

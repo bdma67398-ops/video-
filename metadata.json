@@ -1,0 +1,6 @@
+{
+  "name": "ভাইরাল ভিডিও দেখুন",
+  "description": "প্রিমিয়াম ভাইরাল ভিডিও স্ট্রিমিং ও অ্যাডমিন কন্ট্রোল প্ল্যাটফর্ম (Native, Banner, Popunder, Social Bar, Monetag ও 7s অ্যাড গেট)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
