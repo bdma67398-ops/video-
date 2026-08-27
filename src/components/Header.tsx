@@ -65,29 +65,42 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
         {/* Brand & Live Badge */}
         <div className="w-full md:w-auto flex items-center justify-between gap-4">
-          <div 
-            onClick={() => onSelectCategory('all')} 
-            className="flex items-center gap-2.5 cursor-pointer group"
-          >
-            <div className="relative">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-red-500 to-amber-500 flex items-center justify-center shadow-lg shadow-rose-600/30 group-hover:scale-105 transition-transform">
-                <Flame className="w-6 h-6 text-white animate-pulse" />
+          <div className="flex items-center gap-2.5">
+            <div 
+              onClick={() => onSelectCategory('all')} 
+              className="flex items-center gap-2.5 cursor-pointer group"
+            >
+              <div className="relative">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-red-500 to-amber-500 flex items-center justify-center shadow-lg shadow-rose-600/30 group-hover:scale-105 transition-transform">
+                  <Flame className="w-6 h-6 text-white animate-pulse" />
+                </div>
+                {/* Stealth ❤️ Secret Admin Trigger */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenAdmin();
+                  }}
+                  title="❤️"
+                  className="absolute -bottom-1 -right-1 text-xs select-none hover:scale-125 transition-transform cursor-pointer p-0.5"
+                >
+                  ❤️
+                </button>
               </div>
-              <span className="absolute -bottom-1 -right-1 text-xs select-none">❤️</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white group-hover:text-rose-400 transition-colors font-['Outfit',sans-serif]">
-                  {siteSettings.siteName || 'ভাইরাল ভিডিও দেখুন'}
-                </h1>
-                <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse">
-                  <Radio className="w-2.5 h-2.5" />
-                  Live
-                </span>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white group-hover:text-rose-400 transition-colors font-['Outfit',sans-serif]">
+                    {siteSettings.siteName || 'ভাইরাল ভিডিও দেখুন'}
+                  </h1>
+                  <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse">
+                    <Radio className="w-2.5 h-2.5" />
+                    Live
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-400 font-medium line-clamp-1">
+                  {siteSettings.siteTagline || 'দ্রুততম স্পিডে আনলিমিটেড ভাইরাল ভিডিও দেখুন'}
+                </p>
               </div>
-              <p className="text-[11px] text-neutral-400 font-medium line-clamp-1">
-                {siteSettings.siteTagline || 'দ্রুততম স্পিডে আনলিমিটেড ভাইরাল ভিডিও দেখুন'}
-              </p>
             </div>
           </div>
 

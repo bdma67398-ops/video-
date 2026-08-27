@@ -551,7 +551,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                 </div>
                 <div className="text-neutral-500">•</div>
                 <div className="text-neutral-400">
-                  আপলোডকারী: <span className="text-white font-semibold">{video.uploaderName || 'অ্যাডমিন'}</span>
+                  আপলোডকারী: <span className="text-white font-semibold">{video.uploaderName || 'অফিসিয়াল টিম'}</span>
                 </div>
               </div>
 

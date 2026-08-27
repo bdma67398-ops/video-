@@ -55,15 +55,14 @@ export const Footer: React.FC<FooterProps> = ({
             </a>
           )}
 
-          {/* Admin Login Button at Bottom with Heart ❤️ */}
+          {/* Discreet ❤️ Logo (Stealth Admin Entry) */}
           <button
             type="button"
             onClick={onOpenAdmin}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 hover:border-rose-500/50 text-neutral-300 hover:text-white transition-all text-xs font-semibold active:scale-95 cursor-pointer shadow-sm group"
-            title="অ্যাডমিন প্যানেল লগইন"
+            className="p-1 rounded-full text-xs text-neutral-500 hover:text-rose-500 hover:scale-125 transition-all cursor-pointer select-none"
+            title="❤️"
           >
-            <span className="text-sm group-hover:scale-125 transition-transform duration-200">❤️</span>
-            <span>অ্যাডমিন লগইন</span>
+            ❤️
           </button>
         </div>
 
