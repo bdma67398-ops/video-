@@ -412,6 +412,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                   webkit-playsinline="true"
                   controls
                   preload="auto"
+                  controlsList="nodownload"
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
                   onWaiting={() => setIsBuffering(true)}
@@ -431,40 +432,11 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                   }}
                   onPause={() => setIsPlaying(false)}
                   className="w-full h-full object-contain bg-black"
-                />
-
-                {/* Big Center Play Overlay for mobile or paused state */}
-                {!isPlaying && !isAdGateOpen && (
-                  <div 
-                    onClick={handlePlayToggle}
-                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 cursor-pointer transition-all hover:bg-black/50 z-10 p-4"
-                  >
-                    <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-2xl shadow-rose-600/90 transform hover:scale-105 active:scale-95 transition-all border-2 border-white/80">
-                      <Play className="w-8 sm:w-10 h-8 sm:h-10 fill-current translate-x-0.5 text-white" />
-                    </div>
-                    <span className="mt-3 px-4 py-2 rounded-full bg-neutral-950/90 border border-neutral-700 text-white font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-1.5 text-center">
-                      <Flame className="w-4 h-4 text-rose-500" />
-                      <span>ভিডিও প্লে করুন (Tap to Play)</span>
-                    </span>
-                  </div>
-                )}
-
-                {/* Unmute button helper if muted by browser */}
-                {isMuted && isPlaying && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (videoRef.current) {
-                        videoRef.current.muted = false;
-                        setIsMuted(false);
-                      }
-                    }}
-                    className="absolute bottom-16 right-4 z-20 bg-neutral-900/90 hover:bg-neutral-800 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-neutral-700 shadow-xl flex items-center gap-1.5 animate-pulse"
-                  >
-                    <VolumeX className="w-4 h-4 text-rose-400" />
-                    <span>সাউন্ড অন করুন (Unmute)</span>
-                  </button>
-                )}
+                >
+                  <source src={activeUrl} type="video/mp4" />
+                  <source src={CDN_FALLBACK_STREAMS[0]} type="video/mp4" />
+                  <source src={CDN_FALLBACK_STREAMS[1]} type="video/mp4" />
+                </video>
 
                 {/* Error Fallback Notice */}
                 {loadError && (
@@ -475,12 +447,16 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                       type="button"
                       onClick={() => {
                         setLoadError(false);
-                        setActiveUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+                        setActiveUrl(CDN_FALLBACK_STREAMS[0]);
+                        if (videoRef.current) {
+                          videoRef.current.load();
+                          videoRef.current.play().catch(() => {});
+                        }
                       }}
-                      className="mt-3 px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold flex items-center gap-1.5"
+                      className="mt-3 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-lg"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      <span>পুনরায় চেষ্টা করুন</span>
+                      <span>ব্যাকআপ সার্ভার দিয়ে চালান</span>
                     </button>
                   </div>
                 )}
