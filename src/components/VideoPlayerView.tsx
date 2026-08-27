@@ -66,7 +66,7 @@ function getEmbedUrl(url: string): string | null {
   return null;
 }
 
-// Fallback high-speed CDN video streams
+// Fallback high-speed CDN video streams (Multiple global CDNs)
 const CDN_FALLBACK_STREAMS = [
   'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
   'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
@@ -87,12 +87,14 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isAdGateOpen, setIsAdGateOpen] = useState(false);
   const [adGateCompletedForVideo, setAdGateCompletedForVideo] = useState(false);
   const [hasTriggeredAdThisPlay, setHasTriggeredAdThisPlay] = useState(false);
-  // Safe initial URL (clean dead blob strings immediately)
+  
+  // Safe initial URL resolution
   const getInitialSafeUrl = () => {
     if (!video.videoUrl || video.videoUrl.startsWith('blob:')) {
       return CDN_FALLBACK_STREAMS[0];
@@ -122,6 +124,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   useEffect(() => {
     let isMounted = true;
     setLoadError(false);
+    setIsBuffering(false);
     setIsPlaying(false);
     setIsMuted(false);
     setSelectedServer('main');
@@ -232,6 +235,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     if (!videoRef.current) return;
     setDuration(videoRef.current.duration);
     setLoadError(false);
+    setIsBuffering(false);
   };
 
   const handleVideoError = async () => {
@@ -247,8 +251,10 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     // Switch to first reliable CDN fallback stream
     if (activeUrl !== CDN_FALLBACK_STREAMS[0]) {
       setActiveUrl(CDN_FALLBACK_STREAMS[0]);
+      setSelectedServer('backup1');
     } else if (activeUrl !== CDN_FALLBACK_STREAMS[1]) {
       setActiveUrl(CDN_FALLBACK_STREAMS[1]);
+      setSelectedServer('backup2');
     } else {
       setLoadError(true);
     }
@@ -259,12 +265,16 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     if (videoRef.current.paused) {
       videoRef.current.play().then(() => {
         setIsPlaying(true);
+        setIsBuffering(false);
       }).catch(() => {
         // If autoplay with sound is blocked, attempt with mute
         if (videoRef.current) {
           videoRef.current.muted = true;
           setIsMuted(true);
-          videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+          videoRef.current.play().then(() => {
+            setIsPlaying(true);
+            setIsBuffering(false);
+          }).catch(() => {});
         }
       });
     } else {
@@ -276,6 +286,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   const handleSwitchServer = (server: 'main' | 'backup1' | 'backup2') => {
     setSelectedServer(server);
     setLoadError(false);
+    setIsBuffering(false);
     if (server === 'main') {
       setActiveUrl(video.videoUrl || CDN_FALLBACK_STREAMS[0]);
     } else if (server === 'backup1') {
@@ -403,6 +414,16 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                   preload="auto"
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
+                  onWaiting={() => setIsBuffering(true)}
+                  onPlaying={() => {
+                    setIsPlaying(true);
+                    setIsBuffering(false);
+                    setLoadError(false);
+                  }}
+                  onCanPlay={() => {
+                    setIsBuffering(false);
+                    setLoadError(false);
+                  }}
                   onError={handleVideoError}
                   onPlay={() => {
                     setIsPlaying(true);
@@ -416,14 +437,14 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                 {!isPlaying && !isAdGateOpen && (
                   <div 
                     onClick={handlePlayToggle}
-                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 backdrop-blur-[2px] cursor-pointer transition-all hover:bg-black/40 z-10 p-4"
+                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 cursor-pointer transition-all hover:bg-black/50 z-10 p-4"
                   >
-                    <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-2xl shadow-rose-600/80 transform hover:scale-110 active:scale-90 transition-all border-2 border-white/50 animate-bounce">
-                      <Play className="w-8 sm:w-10 h-8 sm:h-10 fill-current translate-x-0.5" />
+                    <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-2xl shadow-rose-600/90 transform hover:scale-105 active:scale-95 transition-all border-2 border-white/80">
+                      <Play className="w-8 sm:w-10 h-8 sm:h-10 fill-current translate-x-0.5 text-white" />
                     </div>
-                    <span className="mt-3 px-4 py-2 rounded-full bg-neutral-900 border border-neutral-700 text-white font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-1.5 text-center">
+                    <span className="mt-3 px-4 py-2 rounded-full bg-neutral-950/90 border border-neutral-700 text-white font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-1.5 text-center">
                       <Flame className="w-4 h-4 text-rose-500" />
-                      <span>ভিডিও চালু করতে এখানে চাপুন (Play Video)</span>
+                      <span>ভিডিও প্লে করুন (Tap to Play)</span>
                     </span>
                   </div>
                 )}
