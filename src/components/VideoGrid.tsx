@@ -138,10 +138,10 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
                   </span>
                 )}
 
-                {/* Play Hover Overlay Button */}
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-[2px]">
-                  <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-xl shadow-rose-600/50 transform group-hover:scale-110 transition-transform">
-                    <Play className="w-6 h-6 fill-current translate-x-0.5" />
+                {/* Always-visible Mobile Friendly Play Center Button */}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/40 transition-colors">
+                  <div className="w-11 sm:w-13 h-11 sm:h-13 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-2xl shadow-rose-600/60 border border-white/30 transform group-hover:scale-110 active:scale-90 transition-transform">
+                    <Play className="w-5 sm:w-6 h-5 sm:h-6 fill-current translate-x-0.5" />
                   </div>
                 </div>
               </div>

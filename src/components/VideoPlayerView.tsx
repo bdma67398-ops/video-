@@ -226,20 +226,59 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                 allowFullScreen
               />
             ) : (
-              <video
-                ref={videoRef}
-                src={activeUrl}
-                poster={video.thumbnail}
-                autoPlay
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={handleLoadedMetadata}
-                onError={handleVideoError}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                className="w-full h-full object-contain"
-                controls={!isAdGateOpen}
-                playsInline
-              />
+              <div className="relative w-full h-full flex items-center justify-center">
+                <video
+                  ref={videoRef}
+                  src={activeUrl}
+                  poster={video.thumbnail}
+                  autoPlay
+                  playsInline
+                  webkit-playsinline="true"
+                  preload="auto"
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  onError={async () => {
+                    // Fallback to stable CDN video if current link fails
+                    const backupUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+                    if (activeUrl !== backupUrl) {
+                      setActiveUrl(backupUrl);
+                    }
+                  }}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  className="w-full h-full object-contain cursor-pointer"
+                  controls={!isAdGateOpen}
+                  onClick={() => {
+                    if (videoRef.current) {
+                      if (videoRef.current.paused) {
+                        videoRef.current.play().catch(() => {});
+                      } else {
+                        videoRef.current.pause();
+                      }
+                    }
+                  }}
+                />
+
+                {/* Tap to Play Big Center Button if Video is Paused or Waiting on Mobile */}
+                {!isPlaying && !isAdGateOpen && (
+                  <div 
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+                      }
+                    }}
+                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[1px] cursor-pointer transition-all hover:bg-black/30 z-10"
+                  >
+                    <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-2xl shadow-rose-600/70 transform hover:scale-110 active:scale-95 transition-all border-2 border-white/40 animate-pulse">
+                      <Play className="w-8 sm:w-10 h-8 sm:h-10 fill-current translate-x-0.5" />
+                    </div>
+                    <span className="mt-3 px-4 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-700 text-white font-bold text-xs sm:text-sm shadow-xl flex items-center gap-1.5">
+                      <Flame className="w-4 h-4 text-rose-500" />
+                      <span>ভিডিও চালু করতে এখানে চাপ দিন</span>
+                    </span>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Direct Link Floating Button on Video */}
