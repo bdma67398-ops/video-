@@ -6,7 +6,7 @@ import { getMediaBlobUrl } from '../utils/mediaStorage';
 import { 
   ArrowLeft, ThumbsUp, Share2, Download, Eye, Clock, Flame, 
   Sparkles, MessageSquare, Send, CheckCircle2, ShieldCheck, Play, 
-  Volume2, VolumeX, Maximize, AlertCircle
+  Volume2, VolumeX, Maximize, AlertCircle, RotateCcw
 } from 'lucide-react';
 
 interface VideoPlayerViewProps {
@@ -18,6 +18,23 @@ interface VideoPlayerViewProps {
   onVideoViewed: (videoId: string) => void;
   onAdTriggered: (videoId: string, type: string) => void;
   onAdCompleted: (videoId: string) => void;
+}
+
+// Convert any YouTube, Vimeo or Facebook video URLs to embeddable player links
+function getEmbedUrl(url: string): string | null {
+  if (!url) return null;
+  const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+  if (ytMatch && ytMatch[1]) {
+    return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&playsinline=1&rel=0`;
+  }
+  const vimeoMatch = url.match(/(?:vimeo\.com\/)(\d+)/i);
+  if (vimeoMatch && vimeoMatch[1]) {
+    return `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1`;
+  }
+  if (url.includes('facebook.com') && !url.includes('facebook.com/plugins/video.php')) {
+    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=0&autoplay=1`;
+  }
+  return null;
 }
 
 export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
@@ -32,6 +49,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isAdGateOpen, setIsAdGateOpen] = useState(false);
@@ -41,6 +59,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   const [likesCount, setLikesCount] = useState(video.likes);
   const [hasLiked, setHasLiked] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   
   // Comments state
   const [comments, setComments] = useState<Array<{ id: string; user: string; text: string; time: string }>>([
@@ -50,14 +69,20 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   ]);
   const [newComment, setNewComment] = useState('');
 
+  const embedUrl = getEmbedUrl(activeUrl) || (video.videoType === 'youtube' || video.videoType === 'embed' ? activeUrl : null);
+
   // Reset ad states and revive URL when video changes
   useEffect(() => {
     setActiveUrl(video.videoUrl);
+    setLoadError(false);
+    setIsPlaying(false);
+
     if (video.blobId) {
       getMediaBlobUrl(video.blobId).then((fresh) => {
         if (fresh) setActiveUrl(fresh);
       });
     }
+
     setAdGateCompletedForVideo(false);
     setHasTriggeredAdThisPlay(false);
     setIsAdGateOpen(false);
@@ -65,10 +90,24 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     setHasLiked(false);
     onVideoViewed(video.id);
 
-    // If iframe/youtube type, schedule midroll ad trigger at triggerSeconds (7s)
+    // Scroll to player view on top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Attempt video autoplay with fallback
+    const timer = setTimeout(() => {
+      if (videoRef.current) {
+        videoRef.current.play().then(() => {
+          setIsPlaying(true);
+        }).catch(() => {
+          // Autoplay blocked by mobile browser - show big play button
+          setIsPlaying(false);
+        });
+      }
+    }, 200);
+
+    // If embed/youtube type, schedule midroll ad trigger at triggerSeconds (7s)
     let iframeTimer: any = null;
-    const isIframe = video.videoType === 'youtube' || video.videoType === 'embed' || video.videoUrl.includes('youtube.com') || video.videoUrl.includes('youtu.be');
-    if (isIframe && adConfig.midrollAdGate.enabled && video.midrollAdEnabled) {
+    if (embedUrl && adConfig.midrollAdGate.enabled && video.midrollAdEnabled) {
       const triggerSec = adConfig.midrollAdGate.triggerSeconds || 7;
       iframeTimer = setTimeout(() => {
         setHasTriggeredAdThisPlay(true);
@@ -78,18 +117,10 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     }
 
     return () => {
+      clearTimeout(timer);
       if (iframeTimer) clearTimeout(iframeTimer);
     };
   }, [video.id, video.videoUrl, video.blobId]);
-
-  const handleVideoError = async () => {
-    if (video.blobId) {
-      const fresh = await getMediaBlobUrl(video.blobId);
-      if (fresh && fresh !== activeUrl) {
-        setActiveUrl(fresh);
-      }
-    }
-  };
 
   // Handle Video Time Update for 7-second Midroll Ad Gate
   const handleTimeUpdate = () => {
@@ -121,6 +152,44 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     setDuration(videoRef.current.duration);
   };
 
+  const handleVideoError = async () => {
+    // If local blob, try to retrieve fresh blob
+    if (video.blobId) {
+      const fresh = await getMediaBlobUrl(video.blobId);
+      if (fresh && fresh !== activeUrl) {
+        setActiveUrl(fresh);
+        return;
+      }
+    }
+
+    // Fallback to high-speed CDN sample
+    const fallbackCdn = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+    if (activeUrl !== fallbackCdn) {
+      setActiveUrl(fallbackCdn);
+    } else {
+      setLoadError(true);
+    }
+  };
+
+  const handlePlayToggle = () => {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) {
+      videoRef.current.play().then(() => {
+        setIsPlaying(true);
+      }).catch(() => {
+        // Retry with mute if browser restricts unmuted autoplay
+        if (videoRef.current) {
+          videoRef.current.muted = true;
+          setIsMuted(true);
+          videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+        }
+      });
+    } else {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
   const handleAdGateCompleted = () => {
     setIsAdGateOpen(false);
     setAdGateCompletedForVideo(true);
@@ -130,8 +199,8 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     if (videoRef.current) {
       videoRef.current.play().then(() => {
         setIsPlaying(true);
-      }).catch((e) => {
-        console.log('Play blocked, user interaction required');
+      }).catch(() => {
+        // If blocked, wait for user click
       });
     }
   };
@@ -200,13 +269,13 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-neutral-300 hover:text-white bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 px-4 py-2 rounded-xl transition-all"
+          className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-neutral-200 hover:text-white bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
         >
           <ArrowLeft className="w-4 h-4 text-rose-500" />
-          <span>সকল ভাইরাল ভিডিওতে ফিরে যান</span>
+          <span>সকল ভিডিওতে ফিরে যান</span>
         </button>
 
-        <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-rose-400 bg-rose-950/60 border border-rose-800/40 px-3 py-1 rounded-full font-bold">
+        <span className="inline-flex items-center gap-1.5 text-xs text-rose-400 bg-rose-950/70 border border-rose-800/40 px-3 py-1.5 rounded-full font-bold">
           <Flame className="w-3.5 h-3.5" />
           {video.category}
         </span>
@@ -216,17 +285,17 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
         {/* Main Player Column */}
         <div className="lg:col-span-8 space-y-4">
           {/* Video Container */}
-          <div className="relative aspect-video w-full rounded-2xl sm:rounded-3xl overflow-hidden bg-black border border-neutral-800 shadow-2xl shadow-black/80">
-            {video.videoType === 'youtube' || video.videoType === 'embed' || activeUrl.includes('youtube.com/embed') || activeUrl.includes('player.vimeo.com') ? (
+          <div className="relative aspect-video w-full rounded-2xl sm:rounded-3xl overflow-hidden bg-black border border-neutral-800 shadow-2xl shadow-black/90">
+            {embedUrl ? (
               <iframe
-                src={activeUrl}
+                src={embedUrl}
                 title={video.title}
                 className="w-full h-full border-0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               />
             ) : (
-              <div className="relative w-full h-full flex items-center justify-center">
+              <div className="relative w-full h-full flex items-center justify-center bg-black">
                 <video
                   ref={videoRef}
                   src={activeUrl}
@@ -237,45 +306,63 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                   preload="auto"
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
-                  onError={async () => {
-                    // Fallback to stable CDN video if current link fails
-                    const backupUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-                    if (activeUrl !== backupUrl) {
-                      setActiveUrl(backupUrl);
-                    }
-                  }}
+                  onError={handleVideoError}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
-                  className="w-full h-full object-contain cursor-pointer"
+                  className="w-full h-full object-contain"
                   controls={!isAdGateOpen}
-                  onClick={() => {
-                    if (videoRef.current) {
-                      if (videoRef.current.paused) {
-                        videoRef.current.play().catch(() => {});
-                      } else {
-                        videoRef.current.pause();
-                      }
-                    }
-                  }}
+                  onClick={handlePlayToggle}
                 />
 
-                {/* Tap to Play Big Center Button if Video is Paused or Waiting on Mobile */}
+                {/* Big Center Play Overlay for mobile or paused state */}
                 {!isPlaying && !isAdGateOpen && (
                   <div 
-                    onClick={() => {
-                      if (videoRef.current) {
-                        videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
-                      }
-                    }}
-                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[1px] cursor-pointer transition-all hover:bg-black/30 z-10"
+                    onClick={handlePlayToggle}
+                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 backdrop-blur-[2px] cursor-pointer transition-all hover:bg-black/40 z-10 p-4"
                   >
-                    <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-2xl shadow-rose-600/70 transform hover:scale-110 active:scale-95 transition-all border-2 border-white/40 animate-pulse">
+                    <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-2xl shadow-rose-600/80 transform hover:scale-110 active:scale-90 transition-all border-2 border-white/50 animate-bounce">
                       <Play className="w-8 sm:w-10 h-8 sm:h-10 fill-current translate-x-0.5" />
                     </div>
-                    <span className="mt-3 px-4 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-700 text-white font-bold text-xs sm:text-sm shadow-xl flex items-center gap-1.5">
+                    <span className="mt-3 px-4 py-2 rounded-full bg-neutral-900 border border-neutral-700 text-white font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-1.5 text-center">
                       <Flame className="w-4 h-4 text-rose-500" />
-                      <span>ভিডিও চালু করতে এখানে চাপ দিন</span>
+                      <span>ভিডিও চালু করতে এখানে চাপুন (Play Video)</span>
                     </span>
+                  </div>
+                )}
+
+                {/* Unmute button helper if muted by browser */}
+                {isMuted && isPlaying && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.muted = false;
+                        setIsMuted(false);
+                      }
+                    }}
+                    className="absolute bottom-16 right-4 z-20 bg-neutral-900/90 hover:bg-neutral-800 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-neutral-700 shadow-xl flex items-center gap-1.5 animate-pulse"
+                  >
+                    <VolumeX className="w-4 h-4 text-rose-400" />
+                    <span>সাউন্ড অন করুন (Unmute)</span>
+                  </button>
+                )}
+
+                {/* Error Fallback Notice */}
+                {loadError && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-900/95 text-center p-6 z-20">
+                    <AlertCircle className="w-10 h-10 text-rose-500 mb-2" />
+                    <p className="text-white font-bold text-sm">ভিডিও লোড হতে সমস্যা হয়েছে</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoadError(false);
+                        setActiveUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+                      }}
+                      className="mt-3 px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold flex items-center gap-1.5"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>পুনরায় চেষ্টা করুন</span>
+                    </button>
                   </div>
                 )}
               </div>
