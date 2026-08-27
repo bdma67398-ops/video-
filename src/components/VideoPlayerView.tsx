@@ -92,7 +92,15 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   const [isAdGateOpen, setIsAdGateOpen] = useState(false);
   const [adGateCompletedForVideo, setAdGateCompletedForVideo] = useState(false);
   const [hasTriggeredAdThisPlay, setHasTriggeredAdThisPlay] = useState(false);
-  const [activeUrl, setActiveUrl] = useState(video.videoUrl || CDN_FALLBACK_STREAMS[0]);
+  // Safe initial URL (clean dead blob strings immediately)
+  const getInitialSafeUrl = () => {
+    if (!video.videoUrl || video.videoUrl.startsWith('blob:')) {
+      return CDN_FALLBACK_STREAMS[0];
+    }
+    return video.videoUrl;
+  };
+
+  const [activeUrl, setActiveUrl] = useState<string>(getInitialSafeUrl);
   const [likesCount, setLikesCount] = useState(video.likes);
   const [hasLiked, setHasLiked] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
@@ -133,13 +141,8 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
         }
       }
 
-      // If URL is a dead blob URL from another device and not found locally, use reliable CDN stream
-      if (candidateUrl && candidateUrl.startsWith('blob:') && !candidateUrl.includes(window.location.host)) {
-        // Fallback for public visitors
-        candidateUrl = CDN_FALLBACK_STREAMS[0];
-      }
-
-      if (!candidateUrl) {
+      // If URL is empty or dead blob URL, use reliable CDN stream immediately
+      if (!candidateUrl || candidateUrl.startsWith('blob:')) {
         candidateUrl = CDN_FALLBACK_STREAMS[0];
       }
 
@@ -160,17 +163,25 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     // Scroll to player view on top
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Attempt video autoplay safely with mobile gesture fallback
+    // Attempt video playback safely with automatic fallback for mobile
     const timer = setTimeout(() => {
       if (videoRef.current) {
         videoRef.current.play().then(() => {
           if (isMounted) setIsPlaying(true);
         }).catch(() => {
-          // Autoplay restricted by browser until user taps play button
-          if (isMounted) setIsPlaying(false);
+          // If browser policy blocks sound on initial load, play muted so user can tap to unmute
+          if (videoRef.current && isMounted) {
+            videoRef.current.muted = true;
+            setIsMuted(true);
+            videoRef.current.play().then(() => {
+              if (isMounted) setIsPlaying(true);
+            }).catch(() => {
+              if (isMounted) setIsPlaying(false);
+            });
+          }
         });
       }
-    }, 300);
+    }, 250);
 
     // If embed/youtube type, schedule midroll ad trigger at triggerSeconds (7s)
     let iframeTimer: any = null;

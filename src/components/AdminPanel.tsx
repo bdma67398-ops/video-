@@ -1919,16 +1919,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 ) : (
                   <div>
                     <label className="block text-xs font-bold text-neutral-300 mb-1.5">
-                      সরাসরি ভিডিও স্ট্রিম বা MP4 URL লিঙ্ক পেস্ট করুন:
+                      ভিডিও লিঙ্ক পেস্ট করুন (YouTube, Facebook, Google Drive, MP4 বা যেকোনো ভিডিও URL):
                     </label>
                     <input
                       type="url"
                       required={videoSourceMode === 'url'}
                       value={newVideo.videoUrl || ''}
                       onChange={(e) => setNewVideo({ ...newVideo, videoUrl: e.target.value })}
-                      placeholder="https://commondatastorage.googleapis.com/.../video.mp4"
+                      placeholder="https://www.youtube.com/watch?v=... বা https://.../video.mp4"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-sm text-white focus:outline-none focus:border-rose-500 font-mono"
                     />
+                    <p className="text-[11px] text-neutral-400 mt-1.5">
+                      💡 YouTube ভিডিও, Shorts, Facebook ভিডিও, Google Drive শেয়ার লিঙ্ক অথবা সরাসরি MP4 স্ট্রিমিং লিঙ্ক যেকোনো একটি পেস্ট করলেই অটোমেটিক চলবে।
+                    </p>
                   </div>
                 )}
               </div>
