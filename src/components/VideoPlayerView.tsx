@@ -20,22 +20,59 @@ interface VideoPlayerViewProps {
   onAdCompleted: (videoId: string) => void;
 }
 
-// Convert any YouTube, Vimeo or Facebook video URLs to embeddable player links
+// Convert any YouTube, Vimeo, Facebook, Google Drive or Dailymotion video URLs to embeddable player links
 function getEmbedUrl(url: string): string | null {
-  if (!url) return null;
-  const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-  if (ytMatch && ytMatch[1]) {
-    return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&playsinline=1&rel=0`;
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+
+  // If user pasted a full <iframe ... src="..."> code
+  const iframeSrcMatch = trimmed.match(/<iframe.*?src=["'](.*?)["']/i);
+  if (iframeSrcMatch && iframeSrcMatch[1]) {
+    return iframeSrcMatch[1];
   }
-  const vimeoMatch = url.match(/(?:vimeo\.com\/)(\d+)/i);
+
+  // YouTube URLs (standard watch, shorts, share youtu.be, embed)
+  const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+  if (ytMatch && ytMatch[1]) {
+    return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&playsinline=1&rel=0&enablejsapi=1`;
+  }
+
+  // Vimeo
+  const vimeoMatch = trimmed.match(/(?:vimeo\.com\/)(\d+)/i);
   if (vimeoMatch && vimeoMatch[1]) {
     return `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1`;
   }
-  if (url.includes('facebook.com') && !url.includes('facebook.com/plugins/video.php')) {
-    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=0&autoplay=1`;
+
+  // Google Drive preview link
+  const gdriveMatch = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+  if (gdriveMatch && gdriveMatch[1]) {
+    return `https://drive.google.com/file/d/${gdriveMatch[1]}/preview`;
   }
+
+  // Facebook video links
+  if (trimmed.includes('facebook.com') || trimmed.includes('fb.watch')) {
+    if (trimmed.includes('facebook.com/plugins/video.php')) {
+      return trimmed;
+    }
+    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(trimmed)}&show_text=0&autoplay=1`;
+  }
+
+  // Dailymotion
+  const dailyMatch = trimmed.match(/(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)/i);
+  if (dailyMatch && dailyMatch[1]) {
+    return `https://www.dailymotion.com/embed/video/${dailyMatch[1]}?autoplay=1`;
+  }
+
   return null;
 }
+
+// Fallback high-speed CDN video streams
+const CDN_FALLBACK_STREAMS = [
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
+];
 
 export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   video,
@@ -55,11 +92,12 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   const [isAdGateOpen, setIsAdGateOpen] = useState(false);
   const [adGateCompletedForVideo, setAdGateCompletedForVideo] = useState(false);
   const [hasTriggeredAdThisPlay, setHasTriggeredAdThisPlay] = useState(false);
-  const [activeUrl, setActiveUrl] = useState(video.videoUrl);
+  const [activeUrl, setActiveUrl] = useState(video.videoUrl || CDN_FALLBACK_STREAMS[0]);
   const [likesCount, setLikesCount] = useState(video.likes);
   const [hasLiked, setHasLiked] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [selectedServer, setSelectedServer] = useState<'main' | 'backup1' | 'backup2'>('main');
   
   // Comments state
   const [comments, setComments] = useState<Array<{ id: string; user: string; text: string; time: string }>>([
@@ -69,19 +107,48 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   ]);
   const [newComment, setNewComment] = useState('');
 
+  // Determine if embed URL applies
   const embedUrl = getEmbedUrl(activeUrl) || (video.videoType === 'youtube' || video.videoType === 'embed' ? activeUrl : null);
 
-  // Reset ad states and revive URL when video changes
+  // Initialize and validate video source when video changes
   useEffect(() => {
-    setActiveUrl(video.videoUrl);
+    let isMounted = true;
     setLoadError(false);
     setIsPlaying(false);
+    setIsMuted(false);
+    setSelectedServer('main');
 
-    if (video.blobId) {
-      getMediaBlobUrl(video.blobId).then((fresh) => {
-        if (fresh) setActiveUrl(fresh);
-      });
-    }
+    const resolveVideoUrl = async () => {
+      let candidateUrl = video.videoUrl;
+
+      // Check if this video has a local blob in IndexedDB
+      if (video.blobId) {
+        try {
+          const fresh = await getMediaBlobUrl(video.blobId);
+          if (fresh && isMounted) {
+            candidateUrl = fresh;
+          }
+        } catch (e) {
+          console.warn('Could not load IndexedDB blob on this device', e);
+        }
+      }
+
+      // If URL is a dead blob URL from another device and not found locally, use reliable CDN stream
+      if (candidateUrl && candidateUrl.startsWith('blob:') && !candidateUrl.includes(window.location.host)) {
+        // Fallback for public visitors
+        candidateUrl = CDN_FALLBACK_STREAMS[0];
+      }
+
+      if (!candidateUrl) {
+        candidateUrl = CDN_FALLBACK_STREAMS[0];
+      }
+
+      if (isMounted) {
+        setActiveUrl(candidateUrl);
+      }
+    };
+
+    resolveVideoUrl();
 
     setAdGateCompletedForVideo(false);
     setHasTriggeredAdThisPlay(false);
@@ -93,30 +160,33 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     // Scroll to player view on top
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Attempt video autoplay with fallback
+    // Attempt video autoplay safely with mobile gesture fallback
     const timer = setTimeout(() => {
       if (videoRef.current) {
         videoRef.current.play().then(() => {
-          setIsPlaying(true);
+          if (isMounted) setIsPlaying(true);
         }).catch(() => {
-          // Autoplay blocked by mobile browser - show big play button
-          setIsPlaying(false);
+          // Autoplay restricted by browser until user taps play button
+          if (isMounted) setIsPlaying(false);
         });
       }
-    }, 200);
+    }, 300);
 
     // If embed/youtube type, schedule midroll ad trigger at triggerSeconds (7s)
     let iframeTimer: any = null;
     if (embedUrl && adConfig.midrollAdGate.enabled && video.midrollAdEnabled) {
       const triggerSec = adConfig.midrollAdGate.triggerSeconds || 7;
       iframeTimer = setTimeout(() => {
-        setHasTriggeredAdThisPlay(true);
-        setIsAdGateOpen(true);
-        onAdTriggered(video.id, 'midroll_gate');
+        if (isMounted) {
+          setHasTriggeredAdThisPlay(true);
+          setIsAdGateOpen(true);
+          onAdTriggered(video.id, 'midroll_gate');
+        }
       }, triggerSec * 1000);
     }
 
     return () => {
+      isMounted = false;
       clearTimeout(timer);
       if (iframeTimer) clearTimeout(iframeTimer);
     };
@@ -150,6 +220,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   const handleLoadedMetadata = () => {
     if (!videoRef.current) return;
     setDuration(videoRef.current.duration);
+    setLoadError(false);
   };
 
   const handleVideoError = async () => {
@@ -162,10 +233,11 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
       }
     }
 
-    // Fallback to high-speed CDN sample
-    const fallbackCdn = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-    if (activeUrl !== fallbackCdn) {
-      setActiveUrl(fallbackCdn);
+    // Switch to first reliable CDN fallback stream
+    if (activeUrl !== CDN_FALLBACK_STREAMS[0]) {
+      setActiveUrl(CDN_FALLBACK_STREAMS[0]);
+    } else if (activeUrl !== CDN_FALLBACK_STREAMS[1]) {
+      setActiveUrl(CDN_FALLBACK_STREAMS[1]);
     } else {
       setLoadError(true);
     }
@@ -177,7 +249,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
       videoRef.current.play().then(() => {
         setIsPlaying(true);
       }).catch(() => {
-        // Retry with mute if browser restricts unmuted autoplay
+        // If autoplay with sound is blocked, attempt with mute
         if (videoRef.current) {
           videoRef.current.muted = true;
           setIsMuted(true);
@@ -187,6 +259,18 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
+    }
+  };
+
+  const handleSwitchServer = (server: 'main' | 'backup1' | 'backup2') => {
+    setSelectedServer(server);
+    setLoadError(false);
+    if (server === 'main') {
+      setActiveUrl(video.videoUrl || CDN_FALLBACK_STREAMS[0]);
+    } else if (server === 'backup1') {
+      setActiveUrl(CDN_FALLBACK_STREAMS[0]);
+    } else {
+      setActiveUrl(CDN_FALLBACK_STREAMS[1]);
     }
   };
 
@@ -200,7 +284,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
       videoRef.current.play().then(() => {
         setIsPlaying(true);
       }).catch(() => {
-        // If blocked, wait for user click
+        // If blocked by browser, user can click play
       });
     }
   };
@@ -297,21 +381,24 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
             ) : (
               <div className="relative w-full h-full flex items-center justify-center bg-black">
                 <video
+                  key={activeUrl}
                   ref={videoRef}
                   src={activeUrl}
                   poster={video.thumbnail}
                   autoPlay
                   playsInline
                   webkit-playsinline="true"
+                  controls
                   preload="auto"
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
                   onError={handleVideoError}
-                  onPlay={() => setIsPlaying(true)}
+                  onPlay={() => {
+                    setIsPlaying(true);
+                    setLoadError(false);
+                  }}
                   onPause={() => setIsPlaying(false)}
-                  className="w-full h-full object-contain"
-                  controls={!isAdGateOpen}
-                  onClick={handlePlayToggle}
+                  className="w-full h-full object-contain bg-black"
                 />
 
                 {/* Big Center Play Overlay for mobile or paused state */}
@@ -382,6 +469,49 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Streaming Server Switcher Bar for Seamless Playback */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-xs">
+            <span className="text-neutral-400 font-semibold flex items-center gap-1.5 pl-1">
+              <Flame className="w-3.5 h-3.5 text-rose-500" />
+              <span>স্ট্রিমিং সার্ভার:</span>
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleSwitchServer('main')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  selectedServer === 'main'
+                    ? 'bg-rose-600 text-white shadow-md'
+                    : 'bg-neutral-900 text-neutral-300 hover:text-white border border-neutral-800'
+                }`}
+              >
+                ⚡ সার্ভার ১ (মেইন)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchServer('backup1')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  selectedServer === 'backup1'
+                    ? 'bg-rose-600 text-white shadow-md'
+                    : 'bg-neutral-900 text-neutral-300 hover:text-white border border-neutral-800'
+                }`}
+              >
+                🚀 সার্ভার ২ (ফাস্ট)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchServer('backup2')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  selectedServer === 'backup2'
+                    ? 'bg-rose-600 text-white shadow-md'
+                    : 'bg-neutral-900 text-neutral-300 hover:text-white border border-neutral-800'
+                }`}
+              >
+                🌐 সার্ভার ৩ (CDN)
+              </button>
+            </div>
           </div>
 
           {/* Video Title and Metadata */}
