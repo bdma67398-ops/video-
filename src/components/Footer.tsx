@@ -55,11 +55,11 @@ export const Footer: React.FC<FooterProps> = ({
             </a>
           )}
 
-          {/* Discreet ❤️ Logo (Stealth Admin Entry) */}
+          {/* Discreet ❤️ Logo (Stealth Entry) */}
           <button
             type="button"
             onClick={onOpenAdmin}
-            className="p-1 rounded-full text-xs text-neutral-500 hover:text-rose-500 hover:scale-125 transition-all cursor-pointer select-none"
+            className="p-2 rounded-xl bg-neutral-900 border border-neutral-800 text-rose-500 hover:text-rose-400 hover:scale-110 active:scale-95 transition-all text-sm cursor-pointer select-none"
             title="❤️"
           >
             ❤️

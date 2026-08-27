@@ -69,9 +69,9 @@ function getEmbedUrl(url: string): string | null {
 // Fallback high-speed CDN video streams (Multiple global CDNs)
 const CDN_FALLBACK_STREAMS = [
   'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+  'https://vjs.zencdn.net/v/oceans.mp4',
   'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
 ];
 
 export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
@@ -95,14 +95,9 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   const [hasTriggeredAdThisPlay, setHasTriggeredAdThisPlay] = useState(false);
   
   // Safe initial URL resolution
-  const getInitialSafeUrl = () => {
-    if (!video.videoUrl || video.videoUrl.startsWith('blob:')) {
-      return CDN_FALLBACK_STREAMS[0];
-    }
-    return video.videoUrl;
-  };
-
-  const [activeUrl, setActiveUrl] = useState<string>(getInitialSafeUrl);
+  const [activeUrl, setActiveUrl] = useState<string>(() => {
+    return video.videoUrl || CDN_FALLBACK_STREAMS[0];
+  });
   const [likesCount, setLikesCount] = useState(video.likes);
   const [hasLiked, setHasLiked] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
@@ -144,8 +139,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
         }
       }
 
-      // If URL is empty or dead blob URL, use reliable CDN stream immediately
-      if (!candidateUrl || candidateUrl.startsWith('blob:')) {
+      if (!candidateUrl) {
         candidateUrl = CDN_FALLBACK_STREAMS[0];
       }
 
@@ -166,13 +160,13 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
     // Scroll to player view on top
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Attempt video playback safely with automatic fallback for mobile
+    // Attempt video playback safely
     const timer = setTimeout(() => {
       if (videoRef.current) {
         videoRef.current.play().then(() => {
           if (isMounted) setIsPlaying(true);
         }).catch(() => {
-          // If browser policy blocks sound on initial load, play muted so user can tap to unmute
+          // If browser policy blocks sound on initial load, try muted autoplay
           if (videoRef.current && isMounted) {
             videoRef.current.muted = true;
             setIsMuted(true);
@@ -184,7 +178,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
           }
         });
       }
-    }, 250);
+    }, 300);
 
     // If embed/youtube type, schedule midroll ad trigger at triggerSeconds (7s)
     let iframeTimer: any = null;
@@ -239,6 +233,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   };
 
   const handleVideoError = async () => {
+    console.warn('Video stream error on URL:', activeUrl);
     // If local blob, try to retrieve fresh blob
     if (video.blobId) {
       const fresh = await getMediaBlobUrl(video.blobId);
@@ -248,7 +243,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
       }
     }
 
-    // Switch to first reliable CDN fallback stream
+    // Switch to fast CDN fallback stream
     if (activeUrl !== CDN_FALLBACK_STREAMS[0]) {
       setActiveUrl(CDN_FALLBACK_STREAMS[0]);
       setSelectedServer('backup1');
@@ -401,7 +396,7 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                 allowFullScreen
               />
             ) : (
-              <div className="relative w-full h-full flex items-center justify-center bg-black">
+              <div className="relative w-full h-full flex items-center justify-center bg-black group">
                 <video
                   key={activeUrl}
                   ref={videoRef}
@@ -432,28 +427,60 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
                   }}
                   onPause={() => setIsPlaying(false)}
                   className="w-full h-full object-contain bg-black"
-                >
-                  <source src={activeUrl} type="video/mp4" />
-                  <source src={CDN_FALLBACK_STREAMS[0]} type="video/mp4" />
-                  <source src={CDN_FALLBACK_STREAMS[1]} type="video/mp4" />
-                </video>
+                />
+
+                {/* Big Center Play Overlay for mobile or paused state */}
+                {!isPlaying && !isAdGateOpen && (
+                  <div 
+                    onClick={handlePlayToggle}
+                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 cursor-pointer transition-all hover:bg-black/40 z-10 p-4"
+                  >
+                    <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-2xl shadow-rose-600/90 transform hover:scale-110 active:scale-95 transition-all border-2 border-white/80">
+                      <Play className="w-8 sm:w-10 h-8 sm:h-10 fill-current translate-x-0.5 text-white" />
+                    </div>
+                    <span className="mt-3 px-4 py-1.5 rounded-full bg-neutral-950/90 border border-neutral-700 text-white font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-1.5 text-center">
+                      <Flame className="w-4 h-4 text-rose-500" />
+                      <span>ভিডিও দেখতে ক্লিক করুন (Tap to Play)</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* Unmute helper button if muted by browser autoplay policy */}
+                {isMuted && isPlaying && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.muted = false;
+                        setIsMuted(false);
+                      }
+                    }}
+                    className="absolute bottom-16 right-4 z-20 bg-neutral-900/95 hover:bg-neutral-800 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-neutral-700 shadow-xl flex items-center gap-1.5 animate-bounce cursor-pointer"
+                  >
+                    <VolumeX className="w-4 h-4 text-rose-400" />
+                    <span>সাউন্ড অন করুন (Unmute)</span>
+                  </button>
+                )}
 
                 {/* Error Fallback Notice */}
                 {loadError && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-900/95 text-center p-6 z-20">
                     <AlertCircle className="w-10 h-10 text-rose-500 mb-2" />
                     <p className="text-white font-bold text-sm">ভিডিও লোড হতে সমস্যা হয়েছে</p>
+                    <p className="text-neutral-400 text-xs mt-1">ব্যাকআপ সার্ভার দিয়ে সহজেই ভিডিওটি চালু করতে পারেন</p>
                     <button
                       type="button"
                       onClick={() => {
                         setLoadError(false);
-                        setActiveUrl(CDN_FALLBACK_STREAMS[0]);
+                        const nextFallback = activeUrl === CDN_FALLBACK_STREAMS[0] ? CDN_FALLBACK_STREAMS[1] : CDN_FALLBACK_STREAMS[0];
+                        setActiveUrl(nextFallback);
                         if (videoRef.current) {
+                          videoRef.current.src = nextFallback;
                           videoRef.current.load();
                           videoRef.current.play().catch(() => {});
                         }
                       }}
-                      className="mt-3 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-lg"
+                      className="mt-3 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>ব্যাকআপ সার্ভার দিয়ে চালান</span>

@@ -397,12 +397,12 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-950/80 border border-rose-800/40 text-rose-300 text-xs font-bold mb-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-rose-950/80 border border-rose-800/40 text-rose-300 text-xs font-bold mb-1.5">
                 <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500 animate-pulse" />
-                <span>অ্যাডমিন প্যানেল লগইন</span>
+                <span>সিক্রেট লক আনলক</span>
               </div>
               <p className="text-xs text-neutral-400">
-                অ্যাডমিন ড্যাশবোর্ডে প্রবেশের জন্য পাসওয়ার্ড দিন
+                প্রবেশ করার জন্য সঠিক পাসওয়ার্ড দিন
               </p>
             </div>
 

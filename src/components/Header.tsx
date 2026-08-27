@@ -104,8 +104,16 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Mobile Share Action */}
+          {/* Mobile Actions (Discreet Heart & Share) */}
           <div className="flex md:hidden items-center gap-2">
+            <button
+              type="button"
+              onClick={onOpenAdmin}
+              className="p-2 rounded-xl bg-neutral-900/90 border border-neutral-800 text-rose-500 hover:text-rose-400 hover:scale-110 active:scale-95 transition-all text-sm cursor-pointer"
+              title="❤️"
+            >
+              ❤️
+            </button>
             <button
               type="button"
               onClick={handleShare}
@@ -161,6 +169,16 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Share2 className="w-3.5 h-3.5 text-rose-400" />
             শেয়ার
+          </button>
+
+          {/* Discreet Desktop Heart Button */}
+          <button
+            type="button"
+            onClick={onOpenAdmin}
+            className="p-2 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-rose-500 hover:text-rose-400 hover:scale-110 active:scale-95 transition-all text-sm cursor-pointer shadow-sm"
+            title="❤️"
+          >
+            ❤️
           </button>
         </div>
       </div>
