@@ -4,7 +4,7 @@ import {
   Shield, Film, Megaphone, BarChart3, Settings, Plus, Trash2, Edit3, 
   Check, Save, Eye, Sparkles, ExternalLink, RefreshCw, Layers, 
   ToggleLeft, ToggleRight, Radio, Link as LinkIcon, Bell, DollarSign,
-  Play, Lock, Clock, AlertTriangle, ArrowUpRight, Upload, Image as ImageIcon,
+  Play, Lock, LogOut, Clock, AlertTriangle, ArrowUpRight, Upload, Image as ImageIcon,
   Video as VideoIcon, Camera, CheckCircle2, XCircle, FileVideo
 } from 'lucide-react';
 import { saveMediaBlob, generateVideoThumbnail, fileToDataUrl } from '../utils/mediaStorage';
@@ -365,14 +365,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            {/* Direct Logout Button */}
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-lg cursor-pointer active:scale-95"
-              title="অ্যাডমিন প্যানেল লক করুন ও বের হন"
+              className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-lg shadow-rose-600/30 cursor-pointer active:scale-95 border border-rose-400/40"
+              title="অ্যাডমিন প্যানেল থেকে লগআউট করুন ও লক করুন"
             >
-              <Lock className="w-4 h-4 text-rose-400 group-hover:text-white" />
-              <span>🔒 লক করুন ও লগআউট</span>
+              <LogOut className="w-4 h-4" />
+              <span>🚪 লগআউট (Logout)</span>
             </button>
 
             <button
@@ -493,6 +494,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           >
             <Settings className="w-4 h-4" />
             <span>⚙️ সাইট সেটিংস</span>
+          </button>
+
+          {/* Quick Logout Tab Option */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="sm:ml-auto px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 bg-rose-950/60 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-800/40 hover:border-rose-500 transition-all shadow-md active:scale-95 cursor-pointer"
+            title="লগআউট করে অ্যাডমিন প্যানেল লক করুন"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>🚪 লগআউট (Logout)</span>
           </button>
         </div>
       </div>
@@ -2412,16 +2424,66 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleSaveSettings}
-            className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 transition-all active:scale-95"
-          >
-            <Save className="w-4 h-4" />
-            <span>সাইট সেটিংস সেভ করুন</span>
-          </button>
+          <div className="pt-4 border-t border-neutral-800">
+            <button
+              type="button"
+              onClick={handleSaveSettings}
+              className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 transition-all active:scale-95 mb-4"
+            >
+              <Save className="w-4 h-4" />
+              <span>সাইট সেটিংস সেভ করুন</span>
+            </button>
+
+            {/* Admin Security & Logout Section */}
+            <div className="bg-neutral-950/90 border border-rose-900/40 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">অ্যাডমিন সেশন ও লগআউট</h4>
+                  <p className="text-xs text-neutral-400">কাজ শেষ হলে সাথে সাথে লগআউট করে অ্যাডমিন প্যানেল সুরক্ষিত রাখুন</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full sm:w-auto px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>🚪 অ্যাডমিন লগআউট (Logout Now)</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Floating Bottom Quick Action Bar for Easy Logout */}
+      <div className="mt-8 pt-6 border-t border-neutral-800/80 flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-400">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>অ্যাডমিন সেশন একটিভ আছে</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 font-bold transition-all"
+          >
+            সাইট প্রিভিউ ➔
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold flex items-center gap-1.5 shadow-lg active:scale-95 transition-all"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>🚪 লগআউট</span>
+          </button>
+        </div>
+      </div>
 
       {/* Saved Toast Notification */}
       {savedToast && (
