@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Video, AdConfig } from '../types';
-import { MidrollAdGateModal } from './MidrollAdGateModal';
 import { AdDisplay } from './AdDisplay';
 import { getMediaBlobUrl } from '../utils/mediaStorage';
 import { 
-  ArrowLeft, ThumbsUp, Share2, Download, Eye, Clock, Flame, 
-  Sparkles, MessageSquare, Send, CheckCircle2, ShieldCheck, Play, 
-  Volume2, VolumeX, Maximize, AlertCircle, RotateCcw
+  ArrowLeft, ThumbsUp, Share2, Eye, Clock, Flame, 
+  Sparkles, MessageSquare, Send, CheckCircle2, Play, 
+  ExternalLink, Lock, Zap, ArrowRight, ShieldCheck, SendHorizontal
 } from 'lucide-react';
 
 interface VideoPlayerViewProps {
@@ -18,61 +17,8 @@ interface VideoPlayerViewProps {
   onVideoViewed: (videoId: string) => void;
   onAdTriggered: (videoId: string, type: string) => void;
   onAdCompleted: (videoId: string) => void;
+  telegramLink?: string;
 }
-
-// Convert any YouTube, Vimeo, Facebook, Google Drive or Dailymotion video URLs to embeddable player links
-function getEmbedUrl(url: string): string | null {
-  if (!url || typeof url !== 'string') return null;
-  const trimmed = url.trim();
-
-  // If user pasted a full <iframe ... src="..."> code
-  const iframeSrcMatch = trimmed.match(/<iframe.*?src=["'](.*?)["']/i);
-  if (iframeSrcMatch && iframeSrcMatch[1]) {
-    return iframeSrcMatch[1];
-  }
-
-  // YouTube URLs (standard watch, shorts, share youtu.be, embed)
-  const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-  if (ytMatch && ytMatch[1]) {
-    return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&playsinline=1&rel=0&enablejsapi=1`;
-  }
-
-  // Vimeo
-  const vimeoMatch = trimmed.match(/(?:vimeo\.com\/)(\d+)/i);
-  if (vimeoMatch && vimeoMatch[1]) {
-    return `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1`;
-  }
-
-  // Google Drive preview link
-  const gdriveMatch = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
-  if (gdriveMatch && gdriveMatch[1]) {
-    return `https://drive.google.com/file/d/${gdriveMatch[1]}/preview`;
-  }
-
-  // Facebook video links
-  if (trimmed.includes('facebook.com') || trimmed.includes('fb.watch')) {
-    if (trimmed.includes('facebook.com/plugins/video.php')) {
-      return trimmed;
-    }
-    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(trimmed)}&show_text=0&autoplay=1`;
-  }
-
-  // Dailymotion
-  const dailyMatch = trimmed.match(/(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)/i);
-  if (dailyMatch && dailyMatch[1]) {
-    return `https://www.dailymotion.com/embed/video/${dailyMatch[1]}?autoplay=1`;
-  }
-
-  return null;
-}
-
-// Fallback high-speed CDN video streams (Multiple global CDNs)
-const CDN_FALLBACK_STREAMS = [
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  'https://vjs.zencdn.net/v/oceans.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
-];
 
 export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   video,
@@ -82,719 +28,546 @@ export const VideoPlayerView: React.FC<VideoPlayerViewProps> = ({
   onSelectVideo,
   onVideoViewed,
   onAdTriggered,
-  onAdCompleted
+  onAdCompleted,
+  telegramLink = 'https://t.me/+6WMf5P3PMaowZjk1'
 }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [isAdGateOpen, setIsAdGateOpen] = useState(false);
-  const [adGateCompletedForVideo, setAdGateCompletedForVideo] = useState(false);
-  const [hasTriggeredAdThisPlay, setHasTriggeredAdThisPlay] = useState(false);
-  
-  // Safe initial URL resolution
-  const [activeUrl, setActiveUrl] = useState<string>(() => {
-    return video.videoUrl || CDN_FALLBACK_STREAMS[0];
-  });
   const [likesCount, setLikesCount] = useState(video.likes);
   const [hasLiked, setHasLiked] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const [selectedServer, setSelectedServer] = useState<'main' | 'backup1' | 'backup2'>('main');
-  
+  const [displayImage, setDisplayImage] = useState<string>(video.thumbnail);
+
+  // 20-Second Ad Gate State Management
+  const countdownDuration = video.adDuration || adConfig.midrollAdGate.countdownSeconds || 20;
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(countdownDuration);
+  const [adClicked, setAdClicked] = useState<boolean>(false);
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
+  const timerRef = useRef<any>(null);
+
+  // Target ad url to monetize traffic
+  const fallbackAdUrl = 'https://www.profitableratecpmnetwork.com/fhk12swps?key=431d1e23619240ac97ef4d6285054d6a';
+  const targetAdUrl = adConfig.midrollAdGate.directLinkUrl && adConfig.midrollAdGate.directLinkUrl.trim().length > 0 && !adConfig.midrollAdGate.directLinkUrl.includes('example.com')
+    ? adConfig.midrollAdGate.directLinkUrl
+    : fallbackAdUrl;
+
+  // Target Video / Telegram Link for "এখন ভিডিও দেখুন"
+  const targetVideoDestination = (video.videoUrl && video.videoUrl.startsWith('http') && !video.videoUrl.includes('sample'))
+    ? video.videoUrl
+    : (video.directDownloadLink && video.directDownloadLink.startsWith('http'))
+      ? video.directDownloadLink
+      : (telegramLink || 'https://t.me/+6WMf5P3PMaowZjk1');
+
   // Comments state
   const [comments, setComments] = useState<Array<{ id: string; user: string; text: string; time: string }>>([
-    { id: '1', user: 'রাকিব আহমেদ', text: 'অসাধারণ ভিডিও! অনেক হাসলাম ভাই 😂🔥', time: '১০ মিনিট আগে' },
-    { id: '2', user: 'তানভীর হোসাইন', text: 'পুরো ঘটনাটা সত্যি অবিশ্বাস্য ছিল!', time: '২৫ মিনিট আগে' },
-    { id: '3', user: 'সুমাইয়া জাহান', text: 'সবাইকে দেখার অনুরোধ রইল, দারুণ লাগলো।', time: '১ ঘণ্টা আগে' }
+    { id: '1', user: 'রাকিব আহমেদ', text: 'অসাধারণ কনটেন্ট! অনেক ভালো লাগলো 🔥', time: '১০ মিনিট আগে' },
+    { id: '2', user: 'তানভীর হোসাইন', text: 'ফুল ভিডিও দেখে শান্তি পেলাম, ধন্যবাদ!', time: '২৫ মিনিট আগে' },
+    { id: '3', user: 'সুমাইয়া জাহান', text: 'টেলিগ্রামেও সব ভিডিওগুলো দেওয়া আছে দারুণ।', time: '১ ঘণ্টা আগে' }
   ]);
   const [newComment, setNewComment] = useState('');
 
-  // Determine if embed URL applies
-  const embedUrl = getEmbedUrl(activeUrl) || (video.videoType === 'youtube' || video.videoType === 'embed' ? activeUrl : null);
-
-  // Initialize and validate video source when video changes
+  // When video changes, load image and reset 20s gate
   useEffect(() => {
     let isMounted = true;
-    setLoadError(false);
-    setIsBuffering(false);
-    setIsPlaying(false);
-    setIsMuted(false);
-    setSelectedServer('main');
-
-    const resolveVideoUrl = async () => {
-      let candidateUrl = video.videoUrl;
-
-      // Check if this video has a local blob in IndexedDB
-      if (video.blobId) {
-        try {
-          const fresh = await getMediaBlobUrl(video.blobId);
-          if (fresh && isMounted) {
-            candidateUrl = fresh;
-          }
-        } catch (e) {
-          console.warn('Could not load IndexedDB blob on this device', e);
-        }
-      }
-
-      if (!candidateUrl) {
-        candidateUrl = CDN_FALLBACK_STREAMS[0];
-      }
-
-      if (isMounted) {
-        setActiveUrl(candidateUrl);
-      }
-    };
-
-    resolveVideoUrl();
-
-    setAdGateCompletedForVideo(false);
-    setHasTriggeredAdThisPlay(false);
-    setIsAdGateOpen(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+    
+    setSecondsRemaining(countdownDuration);
+    setAdClicked(false);
+    setIsUnlocked(false);
     setLikesCount(video.likes);
     setHasLiked(false);
     onVideoViewed(video.id);
 
-    // Scroll to player view on top
+    const resolveImage = async () => {
+      if (video.blobId) {
+        try {
+          const fresh = await getMediaBlobUrl(video.blobId);
+          if (fresh && isMounted) {
+            setDisplayImage(fresh);
+            return;
+          }
+        } catch (e) {
+          console.warn('Could not retrieve image from storage', e);
+        }
+      }
+      if (isMounted) {
+        setDisplayImage(video.thumbnail);
+      }
+    };
+
+    resolveImage();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Attempt video playback safely
-    const timer = setTimeout(() => {
-      if (videoRef.current) {
-        videoRef.current.play().then(() => {
-          if (isMounted) setIsPlaying(true);
-        }).catch(() => {
-          // If browser policy blocks sound on initial load, try muted autoplay
-          if (videoRef.current && isMounted) {
-            videoRef.current.muted = true;
-            setIsMuted(true);
-            videoRef.current.play().then(() => {
-              if (isMounted) setIsPlaying(true);
-            }).catch(() => {
-              if (isMounted) setIsPlaying(false);
-            });
-          }
-        });
-      }
-    }, 300);
-
-    // If embed/youtube type, schedule midroll ad trigger at triggerSeconds (7s)
-    let iframeTimer: any = null;
-    if (embedUrl && adConfig.midrollAdGate.enabled && video.midrollAdEnabled) {
-      const triggerSec = adConfig.midrollAdGate.triggerSeconds || 7;
-      iframeTimer = setTimeout(() => {
-        if (isMounted) {
-          setHasTriggeredAdThisPlay(true);
-          setIsAdGateOpen(true);
-          onAdTriggered(video.id, 'midroll_gate');
-        }
-      }, triggerSec * 1000);
-    }
-
     return () => {
-      isMounted = false;
-      clearTimeout(timer);
-      if (iframeTimer) clearTimeout(iframeTimer);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [video.id, video.videoUrl, video.blobId]);
+  }, [video.id, countdownDuration]);
 
-  // Handle Video Time Update for 7-second Midroll Ad Gate
-  const handleTimeUpdate = () => {
-    if (!videoRef.current) return;
-    const current = videoRef.current.currentTime;
-    setCurrentTime(current);
+  // Handle "অ্যাড দেখুন" button click
+  const handleWatchAdClick = () => {
+    // 1. Open the Ad link in a new tab immediately
+    window.open(targetAdUrl, '_blank');
+    onAdTriggered(video.id, 'watch_ad_click');
 
-    const triggerSec = adConfig.midrollAdGate.triggerSeconds || 7;
+    // 2. Start 20s Countdown Timer
+    setAdClicked(true);
+    setSecondsRemaining(countdownDuration);
 
-    // Trigger Ad Gate at 7 seconds if enabled and not already completed
-    if (
-      adConfig.midrollAdGate.enabled &&
-      video.midrollAdEnabled &&
-      !adGateCompletedForVideo &&
-      !hasTriggeredAdThisPlay &&
-      current >= triggerSec
-    ) {
-      // Pause video immediately
-      videoRef.current.pause();
-      setIsPlaying(false);
-      setHasTriggeredAdThisPlay(true);
-      setIsAdGateOpen(true);
-      onAdTriggered(video.id, 'midroll_gate');
-    }
-  };
+    if (timerRef.current) clearInterval(timerRef.current);
 
-  const handleLoadedMetadata = () => {
-    if (!videoRef.current) return;
-    setDuration(videoRef.current.duration);
-    setLoadError(false);
-    setIsBuffering(false);
-  };
-
-  const handleVideoError = async () => {
-    console.warn('Video stream error on URL:', activeUrl);
-    // If local blob, try to retrieve fresh blob
-    if (video.blobId) {
-      const fresh = await getMediaBlobUrl(video.blobId);
-      if (fresh && fresh !== activeUrl) {
-        setActiveUrl(fresh);
-        return;
-      }
-    }
-
-    // Switch to fast CDN fallback stream
-    if (activeUrl !== CDN_FALLBACK_STREAMS[0]) {
-      setActiveUrl(CDN_FALLBACK_STREAMS[0]);
-      setSelectedServer('backup1');
-    } else if (activeUrl !== CDN_FALLBACK_STREAMS[1]) {
-      setActiveUrl(CDN_FALLBACK_STREAMS[1]);
-      setSelectedServer('backup2');
-    } else {
-      setLoadError(true);
-    }
-  };
-
-  const handlePlayToggle = () => {
-    if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      videoRef.current.play().then(() => {
-        setIsPlaying(true);
-        setIsBuffering(false);
-      }).catch(() => {
-        // If autoplay with sound is blocked, attempt with mute
-        if (videoRef.current) {
-          videoRef.current.muted = true;
-          setIsMuted(true);
-          videoRef.current.play().then(() => {
-            setIsPlaying(true);
-            setIsBuffering(false);
-          }).catch(() => {});
+    timerRef.current = setInterval(() => {
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current);
+          setIsUnlocked(true);
+          onAdCompleted(video.id);
+          return 0;
         }
+        return prev - 1;
       });
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
+    }, 1000);
   };
 
-  const handleSwitchServer = (server: 'main' | 'backup1' | 'backup2') => {
-    setSelectedServer(server);
-    setLoadError(false);
-    setIsBuffering(false);
-    if (server === 'main') {
-      setActiveUrl(video.videoUrl || CDN_FALLBACK_STREAMS[0]);
-    } else if (server === 'backup1') {
-      setActiveUrl(CDN_FALLBACK_STREAMS[0]);
-    } else {
-      setActiveUrl(CDN_FALLBACK_STREAMS[1]);
-    }
-  };
-
-  const handleAdGateCompleted = () => {
-    setIsAdGateOpen(false);
-    setAdGateCompletedForVideo(true);
-    onAdCompleted(video.id);
-
-    // Auto resume playback safely
-    if (videoRef.current) {
-      videoRef.current.play().then(() => {
-        setIsPlaying(true);
-      }).catch(() => {
-        // If blocked by browser, user can click play
-      });
-    }
+  // Handle "এখন ভিডিও দেখুন" button click
+  const handleWatchVideoNow = () => {
+    // Open full video / telegram link
+    window.open(targetVideoDestination, '_blank');
   };
 
   const handleLike = () => {
     if (!hasLiked) {
-      setLikesCount((prev) => prev + 1);
+      setLikesCount(prev => prev + 1);
       setHasLiked(true);
     } else {
-      setLikesCount((prev) => prev - 1);
+      setLikesCount(prev => prev - 1);
       setHasLiked(false);
     }
   };
 
   const handleShare = () => {
     const url = window.location.href;
-    if (navigator.share) {
-      navigator.share({
-        title: video.title,
-        text: video.description,
-        url: url
-      }).catch(() => {});
-    } else {
+    if (navigator.clipboard) {
       navigator.clipboard.writeText(url);
-      setShowShareToast(true);
-      setTimeout(() => setShowShareToast(false), 2500);
     }
-  };
-
-  const handleDirectLinkClick = (type: 'download' | 'server2' | 'hd') => {
-    onAdTriggered(video.id, `direct_link_${type}`);
-    const directUrl = adConfig.directLink.url || video.directDownloadLink || 'https://example.com/direct-offer';
-    window.open(directUrl, '_blank');
+    setShowShareToast(true);
+    setTimeout(() => setShowShareToast(false), 3000);
   };
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim()) return;
     setComments([
-      {
-        id: Date.now().toString(),
-        user: 'দর্শক (আপনি)',
-        text: newComment.trim(),
-        time: 'এইমাত্র'
-      },
+      { id: Date.now().toString(), user: 'ব্যবহারকারী', text: newComment.trim(), time: 'এইমাত্র' },
       ...comments
     ]);
     setNewComment('');
   };
 
-  const relatedVideos = allVideos.filter(v => v.id !== video.id).slice(0, 6);
+  const progressPercent = Math.min(100, Math.max(0, ((countdownDuration - secondsRemaining) / countdownDuration) * 100));
+
+  const relatedVideos = allVideos
+    .filter(v => v.id !== video.id)
+    .slice(0, 6);
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 animate-fadeIn">
-      {/* 7-Second Ad Gate Modal */}
-      <MidrollAdGateModal
-        config={adConfig.midrollAdGate}
-        isOpen={isAdGateOpen}
-        onAdCompleted={handleAdGateCompleted}
-        videoTitle={video.title}
-        onDirectClick={() => onAdTriggered(video.id, 'midroll_sponsor_click')}
-      />
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+      {/* Back Button */}
+      <button
+        type="button"
+        onClick={onBack}
+        className="mb-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 hover:text-white transition-all text-xs sm:text-sm font-semibold active:scale-95 cursor-pointer shadow-sm"
+      >
+        <ArrowLeft className="w-4 h-4 text-rose-500" />
+        <span>সকল পোস্ট দেখুন (Back to Home)</span>
+      </button>
 
-      {/* Back Button & Breadcrumbs */}
-      <div className="flex items-center justify-between mb-4">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-neutral-200 hover:text-white bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
-        >
-          <ArrowLeft className="w-4 h-4 text-rose-500" />
-          <span>সকল ভিডিওতে ফিরে যান</span>
-        </button>
+      {/* Top Banner Ad Spot */}
+      {adConfig.bannerAd.enabled && adConfig.bannerAd.playerUnderBannerCode && (
+        <div className="mb-5">
+          <AdDisplay
+            code={adConfig.bannerAd.playerUnderBannerCode}
+            type="header"
+            title="⚡ হাই স্পিডে ফুল ভিডিও দেখতে ক্লিক করুন!"
+            description="স্পনসর অফার চেক করুন এবং বোনাস উপভোগ করুন।"
+            targetUrl={adConfig.bannerAd.customHeaderLink || targetAdUrl}
+            badgeText="স্পনসরড অফার"
+          />
+        </div>
+      )}
 
-        <span className="inline-flex items-center gap-1.5 text-xs text-rose-400 bg-rose-950/70 border border-rose-800/40 px-3 py-1.5 rounded-full font-bold">
-          <Flame className="w-3.5 h-3.5" />
-          {video.category}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Main Player Column */}
-        <div className="lg:col-span-8 space-y-4">
-          {/* Video Container */}
-          <div className="relative aspect-video w-full rounded-2xl sm:rounded-3xl overflow-hidden bg-black border border-neutral-800 shadow-2xl shadow-black/90">
-            {embedUrl ? (
-              <iframe
-                src={embedUrl}
-                title={video.title}
-                className="w-full h-full border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
+      {/* Main Grid: Post Card & Unlocker + Sidebar */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left 2 Columns: Image Preview & 20s Ad Unlocker */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* HD Image / Poster Container */}
+          <div className="relative rounded-3xl overflow-hidden bg-neutral-950 border-2 border-neutral-800 shadow-2xl shadow-rose-950/20">
+            {/* Blurred ambient background to fit any aspect ratio without cutting */}
+            <div className="relative w-full overflow-hidden flex items-center justify-center bg-neutral-950 min-h-[300px] sm:min-h-[420px] max-h-[600px]">
+              {/* Soft background glow from the image itself */}
+              <div 
+                className="absolute inset-0 bg-cover bg-center blur-2xl opacity-25 scale-110 pointer-events-none"
+                style={{ backgroundImage: `url(${displayImage})` }}
               />
-            ) : (
-              <div className="relative w-full h-full flex items-center justify-center bg-black group">
-                <video
-                  key={activeUrl}
-                  ref={videoRef}
-                  src={activeUrl}
-                  poster={video.thumbnail}
-                  autoPlay
-                  playsInline
-                  webkit-playsinline="true"
-                  controls
-                  preload="auto"
-                  controlsList="nodownload"
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoadedMetadata}
-                  onWaiting={() => setIsBuffering(true)}
-                  onPlaying={() => {
-                    setIsPlaying(true);
-                    setIsBuffering(false);
-                    setLoadError(false);
-                  }}
-                  onCanPlay={() => {
-                    setIsBuffering(false);
-                    setLoadError(false);
-                  }}
-                  onError={handleVideoError}
-                  onPlay={() => {
-                    setIsPlaying(true);
-                    setLoadError(false);
-                  }}
-                  onPause={() => setIsPlaying(false)}
-                  className="w-full h-full object-contain bg-black"
-                />
 
-                {/* Big Center Play Overlay for mobile or paused state */}
-                {!isPlaying && !isAdGateOpen && (
-                  <div 
-                    onClick={handlePlayToggle}
-                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 cursor-pointer transition-all hover:bg-black/40 z-10 p-4"
-                  >
-                    <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-2xl shadow-rose-600/90 transform hover:scale-110 active:scale-95 transition-all border-2 border-white/80">
-                      <Play className="w-8 sm:w-10 h-8 sm:h-10 fill-current translate-x-0.5 text-white" />
-                    </div>
-                    <span className="mt-3 px-4 py-1.5 rounded-full bg-neutral-950/90 border border-neutral-700 text-white font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-1.5 text-center">
-                      <Flame className="w-4 h-4 text-rose-500" />
-                      <span>ভিডিও দেখতে ক্লিক করুন (Tap to Play)</span>
-                    </span>
-                  </div>
-                )}
+              {/* Full Image Display - object-contain prevents any cropping */}
+              <img
+                src={displayImage}
+                alt={video.title}
+                className="relative z-10 w-full max-h-[560px] object-contain mx-auto"
+              />
+              <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
 
-                {/* Unmute helper button if muted by browser autoplay policy */}
-                {isMuted && isPlaying && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (videoRef.current) {
-                        videoRef.current.muted = false;
-                        setIsMuted(false);
-                      }
-                    }}
-                    className="absolute bottom-16 right-4 z-20 bg-neutral-900/95 hover:bg-neutral-800 text-white text-xs font-bold px-3 py-1.5 rounded-full border border-neutral-700 shadow-xl flex items-center gap-1.5 animate-bounce cursor-pointer"
-                  >
-                    <VolumeX className="w-4 h-4 text-rose-400" />
-                    <span>সাউন্ড অন করুন (Unmute)</span>
-                  </button>
-                )}
-
-                {/* Error Fallback Notice */}
-                {loadError && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-900/95 text-center p-6 z-20">
-                    <AlertCircle className="w-10 h-10 text-rose-500 mb-2" />
-                    <p className="text-white font-bold text-sm">ভিডিও লোড হতে সমস্যা হয়েছে</p>
-                    <p className="text-neutral-400 text-xs mt-1">ব্যাকআপ সার্ভার দিয়ে সহজেই ভিডিওটি চালু করতে পারেন</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoadError(false);
-                        const nextFallback = activeUrl === CDN_FALLBACK_STREAMS[0] ? CDN_FALLBACK_STREAMS[1] : CDN_FALLBACK_STREAMS[0];
-                        setActiveUrl(nextFallback);
-                        if (videoRef.current) {
-                          videoRef.current.src = nextFallback;
-                          videoRef.current.load();
-                          videoRef.current.play().catch(() => {});
-                        }
-                      }}
-                      className="mt-3 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>ব্যাকআপ সার্ভার দিয়ে চালান</span>
-                    </button>
-                  </div>
+              {/* Overlay Badges */}
+              <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
+                <span className="bg-rose-600 text-white text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg shadow-rose-600/40">
+                  <Flame className="w-3.5 h-3.5 fill-current animate-pulse" />
+                  <span>{video.category}</span>
+                </span>
+                {video.isViral && (
+                  <span className="bg-amber-500 text-neutral-950 text-xs font-bold px-2.5 py-1 rounded-full shadow-md">
+                    🔥 ভাইরাল
+                  </span>
                 )}
               </div>
-            )}
 
-            {/* Direct Link Floating Button on Video */}
-            {adConfig.directLink.enabled && (
-              <div className="absolute top-3 right-3 z-10">
+              {/* Center Lock / Play Visual Indicator */}
+              <div 
+                onClick={!isUnlocked ? handleWatchAdClick : handleWatchVideoNow}
+                className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 hover:bg-black/30 cursor-pointer transition-all p-4 text-center group"
+              >
+                {!isUnlocked ? (
+                  <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-2xl shadow-rose-600/80 border-2 border-white/60 transform group-hover:scale-110 active:scale-95 transition-transform mb-3">
+                    <Lock className="w-8 sm:w-10 h-8 sm:h-10 text-white animate-pulse" />
+                  </div>
+                ) : (
+                  <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-2xl shadow-emerald-500/80 border-2 border-white transform group-hover:scale-110 active:scale-95 transition-transform mb-3">
+                    <Play className="w-8 sm:w-10 h-8 sm:h-10 fill-current translate-x-0.5 text-white" />
+                  </div>
+                )}
+                <span className="px-4 py-1.5 rounded-full bg-black/80 border border-neutral-700 text-white text-xs sm:text-sm font-bold shadow-xl">
+                  {!isUnlocked ? '🔒 ফুল ভিডিও দেখতে নিচে ২০ সে. অ্যাড দেখুন' : '✅ ভিডিও আনলক হয়েছে - দেখতে ক্লিক করুন'}
+                </span>
+              </div>
+            </div>
+
+            {/* Poster Info Bar */}
+            <div className="p-4 bg-neutral-900/95 border-t border-neutral-800/80 flex items-center justify-between text-xs text-neutral-400">
+              <div className="flex items-center gap-2">
+                <span className="text-amber-400 font-bold flex items-center gap-1">
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>{(likesCount * 12 + 450).toLocaleString('bn-BD')} ভিউ</span>
+                </span>
+                <span>•</span>
+                <span>আপলোডকারী: <strong className="text-white">{video.uploaderName || 'অফিসিয়াল টিম'}</strong></span>
+              </div>
+              <div className="flex items-center gap-1 text-neutral-400">
+                <Clock className="w-3.5 h-3.5" />
+                <span>{video.createdAt}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================================
+              ⭐ 20-SECOND AD WATCH & UNLOCK SECTION (MAIN CORE) ⭐
+             ======================================================== */}
+          <div 
+            id="ad-unlock-section"
+            className="relative rounded-3xl bg-neutral-900 border-2 border-rose-500/80 p-5 sm:p-7 shadow-2xl shadow-rose-950/50 overflow-hidden"
+          >
+            {/* Ambient Background Glow */}
+            <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-72 h-24 bg-rose-600/20 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Header Badge */}
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-rose-600/20 border border-rose-500/40 text-rose-400 text-xs font-bold uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+                <span>ভিডিও আনলক সিস্টেম • Video Unlock</span>
+              </span>
+            </div>
+
+            {/* Main Instruction Headline */}
+            <h2 className="text-lg sm:text-2xl font-black text-white text-center leading-snug mb-2">
+              ফুল ভিডিও দেখতে হলে ২০ সেকেন্ড অ্যাড দেখতে হবে
+            </h2>
+            <p className="text-xs sm:text-sm text-neutral-300 text-center max-w-xl mx-auto mb-5">
+              {!isUnlocked 
+                ? 'নিচের "অ্যাড দেখুন" বাটনে ক্লিক করে ২০ সেকেন্ড অপেক্ষা করুন। এরপর "এখন ভিডিও দেখুন" বাটনে ক্লিক করলেই আপনার কাঙ্ক্ষিত ফুল ভিডিও ওপেন হয়ে যাবে।'
+                : 'অ্যাড দেখা সফল হয়েছে! নিচের "এখন ভিডিও দেখুন" বাটনে ক্লিক করে সম্পূর্ণ ভিডিও উপভোগ করুন।'
+              }
+            </p>
+
+            {/* Stage 1: Before clicking "অ্যাড দেখুন" */}
+            {!adClicked && !isUnlocked && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-neutral-950/80 border border-neutral-800 text-center">
+                  <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-md mb-2">
+                    <Lock className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <p className="text-xs sm:text-sm font-semibold text-neutral-200">
+                    অ্যাড দেখতে নিচের <span className="text-amber-400 font-bold">"অ্যাড দেখুন"</span> বাটনে চাপুন
+                  </p>
+                </div>
+
+                {/* Primary Button: "অ্যাড দেখুন" */}
                 <button
+                  id="btn-watch-ad"
                   type="button"
-                  onClick={() => handleDirectLinkClick('server2')}
-                  className="bg-gradient-to-r from-amber-500 via-rose-600 to-rose-700 hover:from-amber-400 hover:to-rose-600 text-white text-[11px] sm:text-xs font-black px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl shadow-xl shadow-black/80 flex items-center gap-1.5 transition-all transform hover:scale-105 active:scale-95 border border-white/20 animate-pulse cursor-pointer"
-                  title="ডাইরেক্ট লিংক"
+                  onClick={handleWatchAdClick}
+                  className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 via-rose-600 to-rose-700 hover:from-amber-400 hover:to-rose-500 text-white font-black text-base sm:text-xl shadow-2xl shadow-rose-900/60 flex items-center justify-center gap-3 transition-all transform hover:scale-[1.02] active:scale-95 cursor-pointer animate-pulse border border-white/20"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-200 fill-amber-200" />
-                  <span>{adConfig.directLink.videoBadgeText || '⚡ ডাইরেক্ট লিংক / হাই স্পিড ➜'}</span>
+                  <Zap className="w-6 h-6 text-amber-200 fill-amber-200" />
+                  <span>👉 অ্যাড দেখুন</span>
+                  <ExternalLink className="w-5 h-5 text-white/90" />
                 </button>
               </div>
             )}
-          </div>
 
-          {/* Streaming Server Switcher Bar for Seamless Playback */}
-          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-xs">
-            <span className="text-neutral-400 font-semibold flex items-center gap-1.5 pl-1">
-              <Flame className="w-3.5 h-3.5 text-rose-500" />
-              <span>স্ট্রিমিং সার্ভার:</span>
-            </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleSwitchServer('main')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
-                  selectedServer === 'main'
-                    ? 'bg-rose-600 text-white shadow-md'
-                    : 'bg-neutral-900 text-neutral-300 hover:text-white border border-neutral-800'
-                }`}
+            {/* Stage 2: Active 20-Second Countdown Timer */}
+            {adClicked && !isUnlocked && (
+              <div className="space-y-4 p-5 rounded-2xl bg-neutral-950/90 border border-amber-500/40 text-center">
+                <div className="flex items-center justify-center gap-2 text-amber-400 text-sm sm:text-base font-bold">
+                  <Clock className="w-5 h-5 animate-spin" style={{ animationDuration: '3s' }} />
+                  <span>অ্যাড দেখা হচ্ছে... অনুগ্রহ করে ২০ সেকেন্ড অপেক্ষা করুন</span>
+                </div>
+
+                {/* Big Seconds Left Counter */}
+                <div className="py-2">
+                  <div className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-neutral-900 border border-amber-500/50 text-white font-mono text-3xl sm:text-4xl font-black shadow-inner">
+                    <span className="text-amber-400">{secondsRemaining}</span>
+                    <span className="text-xs text-neutral-400 font-sans font-normal">সেকেন্ড বাকি</span>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="w-full bg-neutral-900 rounded-full h-4 overflow-hidden border border-neutral-800 p-0.5">
+                  <div 
+                    className="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-emerald-500 rounded-full transition-all duration-1000 ease-linear shadow-md"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-neutral-400 px-1">
+                  <span>০ সে.</span>
+                  <span className="text-amber-400 font-bold">{Math.round(progressPercent)}% সম্পন্ন</span>
+                  <span>২০ সে.</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-neutral-900/90 text-neutral-400 text-xs flex items-center justify-center gap-2">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>বিজ্ঞাপন সাইটটি ওপেন হয়েছে। ২০ সেকেন্ড শেষ হলেই ভিডিও আনলক হবে...</span>
+                </div>
+              </div>
+            )}
+
+            {/* Stage 3: Ad Finished -> Unlocked "এখন ভিডিও দেখুন" Button */}
+            {isUnlocked && (
+              <div className="space-y-4 p-5 rounded-2xl bg-neutral-950/90 border border-emerald-500/60 text-center">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-950/50">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-400 animate-bounce" />
+                </div>
+
+                <div>
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-300 text-xs font-black">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>অ্যাড দেখা সফল হয়েছে!</span>
+                  </span>
+                  <h3 className="text-lg sm:text-xl font-black text-white mt-1">
+                    আপনার সম্পূর্ণ ভিডিওটি প্রস্তুত!
+                  </h3>
+                </div>
+
+                {/* The Unlocked Watch Video Button */}
+                <button
+                  id="btn-watch-video-now"
+                  type="button"
+                  onClick={handleWatchVideoNow}
+                  className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-base sm:text-xl shadow-2xl shadow-emerald-950/80 flex items-center justify-center gap-3 transition-all transform hover:scale-[1.02] active:scale-95 cursor-pointer animate-pulse border border-emerald-300/40"
+                >
+                  <Play className="w-6 h-6 text-white fill-white" />
+                  <span>🎬 এখন ভিডিও দেখুন</span>
+                  <ArrowRight className="w-6 h-6 text-white" />
+                </button>
+              </div>
+            )}
+
+            {/* Direct Telegram Channel Button */}
+            <div className="mt-4 pt-4 border-t border-neutral-800/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <span className="text-xs text-neutral-400 text-center sm:text-left">
+                সরাসরি টেলিগ্রাম চ্যানেলে সব ভাইরাল ভিডিও দেখতে:
+              </span>
+              <a
+                href={telegramLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs shadow-lg shadow-sky-500/20 active:scale-95 transition-all"
               >
-                ⚡ সার্ভার ১ (মেইন)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSwitchServer('backup1')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
-                  selectedServer === 'backup1'
-                    ? 'bg-rose-600 text-white shadow-md'
-                    : 'bg-neutral-900 text-neutral-300 hover:text-white border border-neutral-800'
-                }`}
-              >
-                🚀 সার্ভার ২ (ফাস্ট)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSwitchServer('backup2')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
-                  selectedServer === 'backup2'
-                    ? 'bg-rose-600 text-white shadow-md'
-                    : 'bg-neutral-900 text-neutral-300 hover:text-white border border-neutral-800'
-                }`}
-              >
-                🌐 সার্ভার ৩ (CDN)
-              </button>
+                <SendHorizontal className="w-4 h-4" />
+                <span>টেলিগ্রাম চ্যানেল জয়েন করুন ➔</span>
+              </a>
             </div>
           </div>
 
-          {/* Video Title and Metadata */}
-          <div className="bg-neutral-900/80 rounded-2xl border border-neutral-800 p-4 sm:p-5">
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="bg-rose-600 text-white text-xs font-black px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                <Flame className="w-3.5 h-3.5" />
-                ট্রেন্ডিং ভাইরাল
-              </span>
-              <span className="bg-neutral-800 text-neutral-300 text-xs font-semibold px-2.5 py-0.5 rounded-full">
-                {video.category}
-              </span>
-              <span className="text-neutral-400 text-xs flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {video.createdAt}
-              </span>
-            </div>
-
+          {/* Post Title, Description & Action Buttons */}
+          <div className="rounded-3xl bg-neutral-900/90 border border-neutral-800 p-5 sm:p-6 space-y-4">
             <h1 className="text-lg sm:text-2xl font-bold text-white leading-snug">
               {video.title}
             </h1>
+            
+            <p className="text-sm text-neutral-300 leading-relaxed">
+              {video.description}
+            </p>
 
-            {/* Stats and Action Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t border-neutral-800">
-              <div className="flex items-center gap-4 text-xs sm:text-sm text-neutral-300">
-                <div className="flex items-center gap-1.5 font-bold text-amber-400">
-                  <Eye className="w-4 h-4 text-amber-400" />
-                  <span>{(video.views).toLocaleString('bn-BD')} ভিউ</span>
-                </div>
-                <div className="text-neutral-500">•</div>
-                <div className="text-neutral-400">
-                  আপলোডকারী: <span className="text-white font-semibold">{video.uploaderName || 'অফিসিয়াল টিম'}</span>
-                </div>
-              </div>
-
+            {/* Like, Share, Telegram Action Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-neutral-800/80">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleLike}
-                  className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer ${
                     hasLiked
-                      ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
-                      : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700'
+                      ? 'bg-rose-600 border-rose-500 text-white shadow-lg shadow-rose-600/30'
+                      : 'bg-neutral-800/80 hover:bg-neutral-800 border-neutral-700 text-neutral-200'
                   }`}
                 >
                   <ThumbsUp className={`w-4 h-4 ${hasLiked ? 'fill-current' : ''}`} />
-                  <span>{(likesCount).toLocaleString('bn-BD')}</span>
+                  <span>{(likesCount).toLocaleString('bn-BD')} লাইক</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleShare}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs sm:text-sm font-bold transition-all"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-800/80 hover:bg-neutral-800 border border-neutral-700 text-neutral-200 hover:text-white text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer"
                 >
                   <Share2 className="w-4 h-4 text-rose-400" />
-                  <span>শেয়ার</span>
+                  <span>শেয়ার করুন</span>
                 </button>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs text-neutral-400">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>নিরাপদ ও ভাইরাস মুক্ত লিংক</span>
               </div>
             </div>
 
-            {/* Direct Link Action Buttons */}
-            {adConfig.directLink.enabled && (
-              <div className="mt-4 pt-4 border-t border-neutral-800">
-                <div className="text-xs font-bold text-amber-400 mb-2.5 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>ডাউনলোড ও হাই-স্পিড প্লেব্যাক লিংক:</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => handleDirectLinkClick('download')}
-                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>{adConfig.directLink.downloadButtonText || '📥 HD ডাউনলোড করুন'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDirectLinkClick('server2')}
-                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95"
-                  >
-                    <Flame className="w-3.5 h-3.5" />
-                    <span>{adConfig.directLink.fastServerButtonText || '⚡ সার্ভার ২ (হাই-স্পিড)'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDirectLinkClick('hd')}
-                    className="w-full py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{adConfig.directLink.hdQualityButtonText || '💎 1080p ফুল কোয়ালিটি'}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Under-Player Banner Ad */}
-          {adConfig.bannerAd.enabled && (
-            <AdDisplay
-              code={adConfig.bannerAd.playerUnderBannerCode}
-              type="banner"
-              title="⚡ দ্রুততম স্পিডে আনলিমিটেড ভিডিও স্ট্রিমিং ও ডাউনলোড"
-              description="কোনো বাফারিং ছাড়া যেকোনো ভিডিও ফুল স্পিডে দেখতে ক্লিক করুন।"
-              targetUrl={adConfig.directLink.url}
-              badgeText="প্লেয়ার স্পনসর ব্যানার"
-              onAdClick={() => onAdTriggered(video.id, 'player_under_banner')}
-            />
-          )}
-
-          {/* Video Description */}
-          <div className="bg-neutral-900/60 rounded-2xl border border-neutral-800 p-4">
-            <h3 className="text-sm font-bold text-neutral-200 mb-2">ভিডিওর বিবরণ:</h3>
-            <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed whitespace-pre-line">
-              {video.description}
-            </p>
-
-            {video.tags && video.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-neutral-800/60">
-                {video.tags.map((tag, idx) => (
-                  <span key={idx} className="text-[11px] text-rose-400 bg-rose-950/40 px-2 py-0.5 rounded font-medium">
-                    #{tag}
-                  </span>
-                ))}
+            {showShareToast && (
+              <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold text-center animate-fadeIn">
+                ✓ লিংক কপি করা হয়েছে! বন্ধুদের সাথে শেয়ার করুন।
               </div>
             )}
           </div>
 
           {/* Comments Section */}
-          <div className="bg-neutral-900/60 rounded-2xl border border-neutral-800 p-4 sm:p-5">
-            <div className="flex items-center gap-2 mb-4">
+          <div className="rounded-3xl bg-neutral-900/90 border border-neutral-800 p-5 sm:p-6 space-y-4">
+            <div className="flex items-center gap-2 text-white font-bold text-sm sm:text-base">
               <MessageSquare className="w-4 h-4 text-rose-500" />
-              <h3 className="text-sm sm:text-base font-bold text-white">
-                মন্তব্যসমূহ ({comments.length})
-              </h3>
+              <span>মন্তব্য ও প্রতিক্রিয়া ({comments.length})</span>
             </div>
 
-            <form onSubmit={handleAddComment} className="flex gap-2 mb-4">
+            {/* Add Comment Input */}
+            <form onSubmit={handleAddComment} className="flex gap-2">
               <input
                 type="text"
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="আপনার মন্তব্য লিখুন..."
-                className="flex-1 px-3.5 py-2 rounded-xl bg-neutral-950 border border-neutral-800 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-rose-500"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-white placeholder-neutral-500 text-xs sm:text-sm focus:outline-none focus:border-rose-500 transition-colors"
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-colors"
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-rose-600/30 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>পাঠান</span>
+                <span>পোস্ট</span>
               </button>
             </form>
 
-            <div className="space-y-3">
-              {comments.map((comment) => (
-                <div key={comment.id} className="p-3 rounded-xl bg-neutral-950/60 border border-neutral-800/80">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-xs font-bold text-rose-400">{comment.user}</span>
-                    <span className="text-[10px] text-neutral-500">{comment.time}</span>
+            {/* Comment List */}
+            <div className="space-y-3 pt-2">
+              {comments.map((c) => (
+                <div key={c.id} className="p-3 rounded-2xl bg-neutral-950/60 border border-neutral-800/80 space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-rose-400">{c.user}</span>
+                    <span className="text-neutral-500 text-[10px]">{c.time}</span>
                   </div>
-                  <p className="text-xs text-neutral-300">{comment.text}</p>
+                  <p className="text-xs text-neutral-300">{c.text}</p>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Sidebar Column (Related Videos & Native/Sidebar Ads) */}
-        <div className="lg:col-span-4 space-y-4">
+        {/* Right Sidebar: Related Videos & Banner Ad */}
+        <div className="space-y-6">
+          {/* Telegram Channel Promo Card */}
+          <div className="p-5 rounded-3xl bg-gradient-to-br from-sky-950/80 to-neutral-900 border border-sky-600/40 shadow-xl space-y-3 text-center">
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-sky-500 text-white flex items-center justify-center shadow-lg shadow-sky-500/40">
+              <SendHorizontal className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-white">অফিসিয়াল টেলিগ্রাম চ্যানেল</h3>
+            <p className="text-xs text-neutral-300">
+              সব নতুন নতুন ভাইরাল ভিডিও সবার আগে দেখতে আমাদের টেলিগ্রামে জয়েন করুন!
+            </p>
+            <a
+              href={telegramLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs shadow-lg shadow-sky-500/30 active:scale-95 transition-all"
+            >
+              টেলিগ্রামে জয়েন করুন ➔
+            </a>
+          </div>
+
           {/* Sidebar Banner Ad */}
-          {adConfig.bannerAd.enabled && (
+          {adConfig.bannerAd.enabled && adConfig.bannerAd.sidebarBannerCode && (
             <AdDisplay
               code={adConfig.bannerAd.sidebarBannerCode}
               type="sidebar"
-              title="🎁 আজকের মেগা অফার ও রিওয়ার্ড"
-              description="সরাসরি সাইট ভিজিট করে আকর্ষণীয় পুরষ্কার বুঝে নিন।"
-              targetUrl={adConfig.directLink.url}
-              badgeText="সাইডবার বিজ্ঞাপন"
-              onAdClick={() => onAdTriggered(video.id, 'sidebar_banner')}
+              title="🎁 স্পেশাল মেগা বোনাস অফার!"
+              description="ক্লিক করে ফ্রি রিওয়ার্ড ক্লেইম করুন।"
+              targetUrl={adConfig.bannerAd.customHeaderLink || targetAdUrl}
+              badgeText="স্পনসরড অফার"
             />
           )}
 
-          <div className="flex items-center gap-2 pb-2 border-b border-neutral-800">
-            <Flame className="w-4 h-4 text-rose-500 animate-pulse" />
-            <h3 className="text-sm sm:text-base font-bold text-white">
-              আরও ভাইরাল ভিডিও দেখুন
+          {/* Related Posts Grid */}
+          <div className="rounded-3xl bg-neutral-900/90 border border-neutral-800 p-4 sm:p-5 space-y-4">
+            <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+              <Flame className="w-4 h-4 text-rose-500" />
+              <span>অন্যান্য ভাইরাল ভিডিওসমূহ</span>
             </h3>
-          </div>
 
-          <div className="space-y-3">
-            {relatedVideos.map((relVid, index) => (
-              <React.Fragment key={relVid.id}>
+            <div className="space-y-3">
+              {relatedVideos.map((rVideo) => (
                 <div
-                  onClick={() => onSelectVideo(relVid)}
-                  className="group flex gap-3 p-2 rounded-xl bg-neutral-900/60 hover:bg-neutral-800/90 border border-neutral-800/80 hover:border-rose-500/40 cursor-pointer transition-all"
+                  key={rVideo.id}
+                  onClick={() => onSelectVideo(rVideo)}
+                  className="group flex gap-3 p-2 rounded-2xl bg-neutral-950/60 hover:bg-neutral-800/60 border border-neutral-800/80 hover:border-rose-500/40 transition-all cursor-pointer"
                 >
-                  <div className="relative aspect-video w-32 flex-shrink-0 overflow-hidden rounded-lg bg-neutral-950">
+                  <div className="relative w-24 h-16 rounded-xl overflow-hidden bg-neutral-900 shrink-0">
                     <img
-                      src={relVid.thumbnail}
-                      alt={relVid.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      src={rVideo.thumbnail}
+                      alt={rVideo.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
-                    <span className="absolute bottom-1 right-1 bg-black/80 text-[10px] text-white font-mono px-1.5 py-0.2 rounded font-bold">
-                      {relVid.duration}
-                    </span>
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10">
+                      <Lock className="w-3.5 h-3.5 text-white/90" />
+                    </div>
                   </div>
-
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-rose-400 transition-colors line-clamp-2 leading-tight">
-                      {relVid.title}
+                  <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                    <h4 className="text-xs font-bold text-neutral-200 group-hover:text-rose-400 line-clamp-2 leading-snug">
+                      {rVideo.title}
                     </h4>
-                    <div className="flex items-center gap-2 text-[10px] text-neutral-400 mt-1">
-                      <span>{(relVid.views).toLocaleString('bn-BD')} ভিউ</span>
+                    <div className="flex items-center gap-2 text-[10px] text-neutral-500">
+                      <span>{(rVideo.views).toLocaleString('bn-BD')} ভিউ</span>
                       <span>•</span>
-                      <span>{relVid.category}</span>
+                      <span className="text-rose-400">{rVideo.category}</span>
                     </div>
                   </div>
                 </div>
-
-                {/* Insert Native Banner after 2nd related video */}
-                {index === 1 && adConfig.nativeBanner.enabled && (
-                  <AdDisplay
-                    code={adConfig.nativeBanner.code}
-                    type="native"
-                    title={adConfig.nativeBanner.title}
-                    description={adConfig.nativeBanner.description}
-                    imageUrl={adConfig.nativeBanner.customImage}
-                    targetUrl={adConfig.nativeBanner.customLink}
-                    ctaText={adConfig.nativeBanner.customCta}
-                    badgeText="স্পনসরড অফার"
-                    onAdClick={() => onAdTriggered(video.id, 'related_native_ad')}
-                  />
-                )}
-              </React.Fragment>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>
-
-      {showShareToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-2xl animate-bounce flex items-center gap-2">
-          <Sparkles className="w-4 h-4" />
-          <span>ভিডিও লিংক কপি করা হয়েছে!</span>
-        </div>
-      )}
     </div>
   );
 };

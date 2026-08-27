@@ -158,14 +158,14 @@ export default function App() {
     };
   }, []);
 
-  // Categories extraction
+  // Categories list
   const categories = [
-    '😂 ফানি ভিডিও',
-    '💥 ব্রেকিং নিউজ',
-    '🎬 নাটক ও মুভি',
-    '📱 রিলস ও শর্টস',
-    '🏏 খেলাধুলা',
-    '🎵 ভাইরাল গান'
+    '🇧🇩 বাংলাদেশি ভিডিও',
+    '💃 ইন্ডিয়ান বৌদি ভিডিও',
+    '🇨🇳 চায়না ভিডিও',
+    '🇸🇦 সৌদি আরব ভিডিও',
+    '🔥 ভাইরাল ভিডিও',
+    '🎬 স্পেশাল ভিডিও'
   ];
 
   // Filtering videos based on category and search query

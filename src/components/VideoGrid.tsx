@@ -104,14 +104,20 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
               className="group relative overflow-hidden rounded-2xl bg-neutral-900/80 border border-neutral-800 hover:border-rose-500/50 hover:shadow-xl hover:shadow-rose-950/30 transition-all duration-300 cursor-pointer flex flex-col"
             >
               {/* Thumbnail Container */}
-              <div className="relative aspect-video w-full overflow-hidden bg-neutral-950">
+              <div className="relative aspect-video w-full overflow-hidden bg-neutral-950 flex items-center justify-center">
+                {/* Ambient blur background so image edges look great */}
+                <div 
+                  className="absolute inset-0 bg-cover bg-center blur-lg opacity-30 scale-110"
+                  style={{ backgroundImage: `url(${video.thumbnail})` }}
+                />
+                
                 <img
                   src={video.thumbnail}
                   alt={video.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  className="relative z-10 w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
 
                 {/* Duration Badge */}
                 <span className="absolute bottom-2 right-2 bg-black/80 text-neutral-100 text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border border-neutral-700/50">
@@ -131,18 +137,19 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
                   </span>
                 </div>
 
-                {/* 7s Ad Gate Notice Badge */}
-                {video.midrollAdEnabled && adConfig.midrollAdGate.enabled && (
-                  <span className="absolute top-2 right-2 bg-amber-500/90 text-neutral-950 text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
-                    ৭ম সে. অ্যাড
-                  </span>
-                )}
+                {/* 20s Ad Gate Notice Badge */}
+                <span className="absolute top-2 right-2 bg-amber-500 text-neutral-950 text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
+                  <span>🔒 ২০ সে. অ্যাড</span>
+                </span>
 
-                {/* Always-visible Mobile Friendly Play Center Button */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/40 transition-colors">
-                  <div className="w-11 sm:w-13 h-11 sm:h-13 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-2xl shadow-rose-600/60 border border-white/30 transform group-hover:scale-110 active:scale-90 transition-transform">
-                    <Play className="w-5 sm:w-6 h-5 sm:h-6 fill-current translate-x-0.5" />
+                {/* Always-visible Mobile Friendly Center Play / Image Preview Overlay */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors p-2 text-center">
+                  <div className="w-11 sm:w-13 h-11 sm:h-13 rounded-full bg-rose-600/95 text-white flex items-center justify-center shadow-2xl shadow-rose-600/80 border-2 border-white/50 transform group-hover:scale-110 active:scale-90 transition-transform mb-1.5">
+                    <Play className="w-5 sm:w-6 h-5 sm:h-6 fill-current translate-x-0.5 text-white" />
                   </div>
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] sm:text-xs font-bold text-white bg-black/80 px-2.5 py-0.5 rounded-full border border-neutral-700">
+                    ফুল ভিডিও দেখতে ক্লিক করুন
+                  </span>
                 </div>
               </div>
 

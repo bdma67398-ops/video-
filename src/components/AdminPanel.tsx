@@ -5,7 +5,7 @@ import {
   Check, Save, Eye, Sparkles, ExternalLink, RefreshCw, Layers, 
   ToggleLeft, ToggleRight, Radio, Link as LinkIcon, Bell, DollarSign,
   Play, Lock, LogOut, Clock, AlertTriangle, ArrowUpRight, Upload, Image as ImageIcon,
-  Video as VideoIcon, Camera, CheckCircle2, XCircle, FileVideo
+  Video as VideoIcon, Camera, CheckCircle2, XCircle, FileVideo, Send, Zap
 } from 'lucide-react';
 import { saveMediaBlob, generateVideoThumbnail, fileToDataUrl } from '../utils/mediaStorage';
 
@@ -59,14 +59,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     videoUrl: '',
     videoType: 'mp4',
     thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80',
-    category: '😂 ফানি ভিডিও',
+    category: '🇧🇩 বাংলাদেশি ভিডিও',
     tags: ['ভাইরাল', 'ভিডিও'],
-    duration: '03:45',
+    duration: '০৩:৪৫',
     midrollAdEnabled: true,
-    midrollTime: 7,
+    midrollTime: 0,
     adDuration: 20,
     directDownloadLink: '',
-    uploaderName: 'অ্যাডমিন',
+    uploaderName: 'অফিসিয়াল টিম',
     status: 'published',
     isViral: true
   });
@@ -178,44 +178,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleAddVideo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newVideo.title || !newVideo.videoUrl) {
-      alert('দয়া করে ভিডিওর টাইটেল এবং গ্যালারি থেকে ভিডিও ফাইল সিলেক্ট করুন অথবা ভিডিও লিঙ্ক দিন!');
+    if (!newVideo.title) {
+      alert('দয়া করে পোস্টের একটি আকর্ষণীয় শিরোনাম (Title) লিখুন!');
       return;
     }
 
-    // Format video URL if YouTube or standard stream link
-    let finalVideoUrl = newVideo.videoUrl || '';
-    let finalVideoType: 'mp4' | 'youtube' | 'embed' | 'stream' = (newVideo.videoType as any) || 'mp4';
-
-    if (finalVideoUrl.includes('youtube.com/watch?v=')) {
-      const vidId = finalVideoUrl.split('v=')[1]?.split('&')[0];
-      if (vidId) {
-        finalVideoUrl = `https://www.youtube-nocookie.com/embed/${vidId}?autoplay=1&rel=0`;
-        finalVideoType = 'youtube';
-      }
-    } else if (finalVideoUrl.includes('youtu.be/')) {
-      const vidId = finalVideoUrl.split('youtu.be/')[1]?.split('?')[0];
-      if (vidId) {
-        finalVideoUrl = `https://www.youtube-nocookie.com/embed/${vidId}?autoplay=1&rel=0`;
-        finalVideoType = 'youtube';
-      }
-    } else if (finalVideoUrl.includes('youtube.com/shorts/')) {
-      const vidId = finalVideoUrl.split('shorts/')[1]?.split('?')[0];
-      if (vidId) {
-        finalVideoUrl = `https://www.youtube-nocookie.com/embed/${vidId}?autoplay=1&rel=0`;
-        finalVideoType = 'youtube';
-      }
-    }
+    const fallbackImg = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80';
+    const finalImage = newVideo.thumbnail || fallbackImg;
+    const finalDestination = newVideo.directDownloadLink || newVideo.videoUrl || siteSettings.telegramLink || 'https://t.me/+6WMf5P3PMaowZjk1';
 
     if (editingVideoId) {
-      // Update existing video
+      // Update existing video/image post
       const updated = videos.map((v) => {
         if (v.id === editingVideoId) {
           return {
             ...v,
             ...newVideo,
-            videoUrl: finalVideoUrl,
-            videoType: finalVideoType,
+            thumbnail: finalImage,
+            videoUrl: finalDestination,
+            directDownloadLink: finalDestination,
             tags: Array.isArray(newVideo.tags) ? newVideo.tags : (newVideo.tags as any).split(',').map((t: string) => t.trim())
           } as Video;
         }
@@ -223,36 +204,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
       onUpdateVideos(updated);
       setEditingVideoId(null);
-      showNotification('✅ ভিডিও সফলভাবে আপডেট করা হয়েছে!');
+      showNotification('✅ পোস্ট সফলভাবে আপডেট করা হয়েছে!');
     } else {
-      // Add new video
+      // Add new image post with 20s ad gate
       const created: Video = {
         id: `vid-${Date.now()}`,
-        title: newVideo.title || 'নতুন ভাইরাল ভিডিও',
-        description: newVideo.description || 'আজকের সেরা ভাইরাল ক্লিপ।',
-        videoUrl: finalVideoUrl,
-        videoType: finalVideoType,
+        title: newVideo.title || 'নতুন ভাইরাল পোস্ট',
+        description: newVideo.description || 'সম্পূর্ণ আসল ভিডিওটি দেখতে ২০ সেকেন্ড অ্যাড দেখুন।',
+        videoUrl: finalDestination,
+        videoType: 'mp4',
         blobId: newVideo.blobId,
-        thumbnail: newVideo.thumbnail || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80',
-        category: newVideo.category || '😂 ফানি ভিডিও',
+        thumbnail: finalImage,
+        category: newVideo.category || '🔥 ভাইরাল ভিডিও',
         tags: Array.isArray(newVideo.tags) ? newVideo.tags : (newVideo.tags as any).split(',').map((t: string) => t.trim()),
-        views: Math.floor(Math.random() * 5000) + 1200,
-        likes: Math.floor(Math.random() * 500) + 100,
-        shares: Math.floor(Math.random() * 200) + 50,
-        duration: newVideo.duration || '03:30',
+        views: Math.floor(Math.random() * 5000) + 1500,
+        likes: Math.floor(Math.random() * 500) + 120,
+        shares: Math.floor(Math.random() * 200) + 60,
+        duration: newVideo.duration || '১০:৪৫',
         createdAt: 'এইমাত্র আপলোড',
         featured: false,
         isViral: true,
-        midrollAdEnabled: newVideo.midrollAdEnabled ?? true,
-        midrollTime: newVideo.midrollTime || 7,
-        adDuration: newVideo.adDuration || 20,
-        directDownloadLink: newVideo.directDownloadLink || '',
-        uploaderName: newVideo.uploaderName || 'অ্যাডমিন',
+        midrollAdEnabled: true,
+        midrollTime: 0,
+        adDuration: 20,
+        directDownloadLink: finalDestination,
+        uploaderName: newVideo.uploaderName || 'অফিসিয়াল টিম',
         status: 'published'
       };
 
       onUpdateVideos([created, ...videos]);
-      showNotification('✅ নতুন ভিডিও সফলভাবে সাইটে পাবলিশ করা হয়েছে!');
+      showNotification('✅ নতুন পোস্ট সফলভাবে সাইটে পাবলিশ করা হয়েছে!');
     }
 
     // Reset Form
@@ -262,17 +243,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setNewVideo({
       title: '',
       description: '',
-      videoUrl: '',
+      videoUrl: 'https://t.me/+6WMf5P3PMaowZjk1',
+      directDownloadLink: 'https://t.me/+6WMf5P3PMaowZjk1',
       videoType: 'mp4',
       thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80',
-      category: '😂 ফানি ভিডিও',
+      category: '🔥 ভাইরাল ভিডিও',
       tags: ['ভাইরাল', 'ভিডিও'],
-      duration: '03:45',
+      duration: '১০:৪৫',
       midrollAdEnabled: true,
-      midrollTime: 7,
+      midrollTime: 0,
       adDuration: 20,
-      directDownloadLink: '',
-      uploaderName: 'অ্যাডমিন',
+      uploaderName: 'অফিসিয়াল টিম',
       status: 'published',
       isViral: true
     });
@@ -466,8 +447,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 : 'bg-neutral-950 text-neutral-300 hover:bg-neutral-800 border border-neutral-800'
             }`}
           >
-            <Film className="w-4 h-4" />
-            <span>🎬 ভিডিও আপলোড ও ম্যানেজার ({videos.length})</span>
+            <ImageIcon className="w-4 h-4" />
+            <span>📸 ইমেজ ও পোস্ট আপলোড ({videos.length})</span>
           </button>
 
           <button
@@ -527,22 +508,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-              {/* Midroll Ad Gate */}
+              {/* 20-Second Ad Watch Link & Gate */}
               <div 
                 onClick={() => setActiveAdSubTab('midroll')}
-                className="p-3 rounded-2xl bg-neutral-950/80 border border-amber-500/30 hover:border-amber-400 cursor-pointer transition-all space-y-1.5"
+                className="p-3 rounded-2xl bg-neutral-950/80 border-2 border-amber-500/50 hover:border-amber-400 cursor-pointer transition-all space-y-1.5 shadow-lg shadow-amber-950/30"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-amber-300 flex items-center gap-1.5">
-                    <span>⏱️</span> ৭ সে. ভিডিও অ্যাড গেট
+                    <span>⚡</span> ২০ সে. "অ্যাড দেখুন" লিংক
                   </span>
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">ভিডিওর মাঝে</span>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">মূল অ্যাড লিংক</span>
                 </div>
                 <p className="text-[11px] text-neutral-400">
-                  <strong className="text-white">কোথায় শো করবে:</strong> ভিডিও চলার ৭ম সেকেন্ডে ফুলস্ক্রিনে ২০ সেকেন্ড বিরতি হিসেবে।
+                  <strong className="text-white">কোথায় শো করবে:</strong> ফুল ভিডিও আনলক করতে ইউজার যখন <span className="text-amber-400">"👉 অ্যাড দেখুন"</span> বাটনে চাপবে তখন এই লিংকটি খুলবে।
                 </p>
                 <p className="text-[11px] text-amber-400/90 font-medium">
-                  👉 <strong>কী দিবেন:</strong> ব্যানার অ্যাড কোড, ইমেজ অথবা ডাইরেক্ট অফার লিংক।
+                  👉 <strong>কী দিবেন:</strong> আপনার Adsterra Direct Link, Smartlink বা Monetag URL।
                 </p>
               </div>
 
@@ -655,7 +636,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               }`}
             >
               <Clock className="w-3.5 h-3.5" />
-              <span>⏱️ ৭ সে. ভিডিও অ্যাড গেট</span>
+              <span>⚡ ২০ সে. "অ্যাড দেখুন" লিংক & গেট</span>
             </button>
 
             <button
@@ -737,21 +718,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </button>
           </div>
 
-          {/* SUBTAB 1: 7-SECOND MIDROLL AD GATE */}
+          {/* SUBTAB 1: 20-SECOND AD WATCH & UNLOCK DIRECT LINK SETTINGS */}
           {activeAdSubTab === 'midroll' && (
             <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 sm:p-6 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-800 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
-                      <Clock className="w-5 h-5" />
+                      <Zap className="w-5 h-5" />
                     </span>
                     <h3 className="text-lg font-bold text-white">
-                      ৭ সেকেন্ড ভিডিও অ্যাড গেট কনফিগারেশন (7s Midroll Ad Gate)
+                      ২০ সেকেন্ড "অ্যাড দেখুন" লিংক ও অ্যাড গেট সেটআপ (Ad Watch Link Setup)
                     </h3>
                   </div>
                   <p className="text-xs text-neutral-400 mt-1">
-                    ইউজার ভিডিও চালু করার ৭ সেকেন্ড পর ভিডিও থেমে যাবে এবং ২০ সেকেন্ড বাধ্যতামূলক অ্যাড দেখতে হবে।
+                    ইউজার যখন ফুল ভিডিও আনলক করতে <strong className="text-amber-300">"👉 অ্যাড দেখুন"</strong> বাটনে চাপবে তখন এখানে দেওয়া অ্যাড লিংক ওপেন হবে।
                   </p>
                 </div>
 
@@ -780,16 +761,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               {/* Guide Note */}
-              <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/30 text-xs space-y-1.5">
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 to-neutral-950 border border-amber-500/40 text-xs space-y-2">
                 <div className="flex items-center gap-2 font-bold text-amber-300">
-                  <span>📍</span>
-                  <span>কোথায় দেখাবে ও কী কোড দিবেন:</span>
+                  <span className="text-base">🎯</span>
+                  <span className="text-sm font-black">এখানে আপনার মূল অ্যাড লিংক দিন:</span>
                 </div>
-                <p className="text-neutral-300 text-[11px]">
-                  • <strong>কোথায় দেখাবে:</strong> যেকোনো ভিডিও ওপেন করে প্লে করার ৭ সেকেন্ড পর পুরো স্ক্রিন জুড়ে পপআপ মডাল আসবে।
+                <p className="text-neutral-200 text-xs leading-relaxed">
+                  ভিজিটর যখন কোনো পোস্টের ইমেজে ক্লিক করবে এবং ফুল ভিডিও পেতে <strong className="text-amber-400">"👉 অ্যাড দেখুন"</strong> বাটনে চাপবে, তখন নিচের ইনপুট বক্সে দেওয়া <strong>Adsterra Direct Link, Smartlink, Monetag লিংক</strong> নতুন ট্যাবে ওপেন হবে।
                 </p>
-                <p className="text-neutral-300 text-[11px]">
-                  • <strong>কী কোড/লিংক দিবেন:</strong> Adsterra/Monetag ব্যানার কোড অথবা আপনার সিপিএ/স্পনসর ডাইরেক্ট লিংক পেস্ট করুন।
+              </div>
+
+              {/* MAIN DIRECT AD LINK INPUT */}
+              <div className="p-4 rounded-2xl bg-neutral-950 border-2 border-amber-500/60 shadow-lg space-y-2">
+                <label className="block text-xs sm:text-sm font-black text-amber-400 flex items-center gap-2">
+                  <ExternalLink className="w-4 h-4" />
+                  <span>👉 "অ্যাড দেখুন" বাটনের ডাইরেক্ট অ্যাড লিংক (Ad Link / Smartlink URL) * :</span>
+                </label>
+                <input
+                  type="text"
+                  value={localAdConfig.midrollAdGate.directLinkUrl}
+                  onChange={(e) => setLocalAdConfig({
+                    ...localAdConfig,
+                    midrollAdGate: { ...localAdConfig.midrollAdGate, directLinkUrl: e.target.value }
+                  })}
+                  placeholder="https://www.profitablecpmrate.com/... বা https://adsterra-direct-link"
+                  className="w-full px-3.5 py-3 rounded-xl bg-neutral-900 border border-amber-500/50 text-sm text-white focus:outline-none focus:border-amber-400 font-mono font-bold"
+                />
+                <p className="text-[11px] text-neutral-400">
+                  💡 Adsterra Direct Link, Monetag Smartlink বা যেকোনো স্পনসরড অ্যাড লিংক এখানে পেস্ট করুন।
                 </p>
               </div>
 
@@ -1806,169 +1805,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             )}
 
             <form onSubmit={handleAddVideo} className="space-y-5">
-              {/* VIDEO SOURCE SECTION */}
+              {/* IMAGE / POSTER UPLOAD SECTION */}
               <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-850 pb-3">
                   <div className="flex items-center gap-2">
                     <span className="p-1.5 rounded-lg bg-rose-600/20 text-rose-400">
-                      <FileVideo className="w-4 h-4" />
-                    </span>
-                    <div>
-                      <h4 className="text-sm font-bold text-white">ভিডিও আপলোড সোর্স (Video File Source)</h4>
-                      <p className="text-[11px] text-neutral-400">ফোন বা কম্পিউটারের গ্যালারি থেকে সরাসরি ভিডিও ফাইল দিন অথবা অনলাইন লিংক ব্যবহার করুন</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-xl border border-neutral-800 self-start sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => setVideoSourceMode('gallery')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                        videoSourceMode === 'gallery'
-                          ? 'bg-rose-600 text-white shadow'
-                          : 'text-neutral-400 hover:text-white'
-                      }`}
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>গ্যালারি / ফাইল</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setVideoSourceMode('url')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                        videoSourceMode === 'url'
-                          ? 'bg-rose-600 text-white shadow'
-                          : 'text-neutral-400 hover:text-white'
-                      }`}
-                    >
-                      <LinkIcon className="w-3.5 h-3.5" />
-                      <span>ভিডিও লিংক (URL)</span>
-                    </button>
-                  </div>
-                </div>
-
-                {videoSourceMode === 'gallery' ? (
-                  <div>
-                    <input
-                      ref={videoFileInputRef}
-                      type="file"
-                      accept="video/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleVideoFilePicked(e.target.files[0]);
-                        }
-                      }}
-                    />
-
-                    {!newVideo.videoUrl || videoSourceMode === 'url' ? (
-                      <div
-                        onClick={() => videoFileInputRef.current?.click()}
-                        className="border-2 border-dashed border-neutral-750 hover:border-rose-500/80 bg-neutral-900/60 hover:bg-neutral-900 rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition-all group"
-                      >
-                        <div className="w-14 h-14 rounded-2xl bg-rose-600/10 text-rose-500 border border-rose-600/30 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                          <Upload className="w-7 h-7" />
-                        </div>
-                        <h5 className="text-sm font-bold text-white mb-1">
-                          ফোন / পিসির গ্যালারি থেকে ভিডিও আপলোড করতে এখানে ক্লিক করুন
-                        </h5>
-                        <p className="text-xs text-neutral-400 mb-3">
-                          MP4, WebM, MOV, MKV ইত্যাদি যেকোনো ভিডিও ফরম্যাট সাপোর্টেড
-                        </p>
-                        <button
-                          type="button"
-                          className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl inline-flex items-center gap-1.5 shadow-md shadow-rose-600/20"
-                        >
-                          <FileVideo className="w-4 h-4" />
-                          <span>গ্যালারি থেকে ভিডিও নির্বাচন করুন</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-3">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-neutral-800 pb-3">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-                            <div>
-                              <span className="text-xs font-bold text-emerald-400 block">ভিডিও লোড সম্পন্ন হয়েছে</span>
-                              <span className="text-xs text-white font-medium break-all">
-                                {videoFileInfo?.name || 'নির্বাচিত ভিডিও'}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {videoFileInfo?.size && (
-                              <span className="px-2.5 py-1 rounded-lg bg-neutral-950 border border-neutral-800 text-[11px] text-amber-400 font-mono">
-                                সাইজ: {videoFileInfo.size}
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => videoFileInputRef.current?.click()}
-                              className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold flex items-center gap-1 transition-colors"
-                            >
-                              <RefreshCw className="w-3 h-3" />
-                              <span>ভিডিও পরিবর্তন</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Video Player Preview */}
-                        <div className="relative rounded-xl overflow-hidden bg-black aspect-video max-h-56 mx-auto border border-neutral-800">
-                          <video
-                            src={newVideo.videoUrl}
-                            controls
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between gap-2 pt-1">
-                          <span className="text-xs text-neutral-400">
-                            দৈর্ঘ্য: <strong className="text-white">{newVideo.duration || '03:30'}</strong>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={handleCaptureVideoFrame}
-                            disabled={isCapturingThumb}
-                            className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-all"
-                          >
-                            <Camera className="w-3.5 h-3.5" />
-                            <span>{isCapturingThumb ? 'ক্যাপচার হচ্ছে...' : '🎬 এই ভিডিও থেকে থাম্বনেইল বানান'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-300 mb-1.5">
-                      ভিডিও লিঙ্ক পেস্ট করুন (YouTube, Facebook, Google Drive, MP4 বা যেকোনো ভিডিও URL):
-                    </label>
-                    <input
-                      type="url"
-                      required={videoSourceMode === 'url'}
-                      value={newVideo.videoUrl || ''}
-                      onChange={(e) => setNewVideo({ ...newVideo, videoUrl: e.target.value })}
-                      placeholder="https://www.youtube.com/watch?v=... বা https://.../video.mp4"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-sm text-white focus:outline-none focus:border-rose-500 font-mono"
-                    />
-                    <p className="text-[11px] text-neutral-400 mt-1.5">
-                      💡 YouTube ভিডিও, Shorts, Facebook ভিডিও, Google Drive শেয়ার লিঙ্ক অথবা সরাসরি MP4 স্ট্রিমিং লিঙ্ক যেকোনো একটি পেস্ট করলেই অটোমেটিক চলবে।
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* THUMBNAIL SOURCE SECTION */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-850 pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
                       <ImageIcon className="w-4 h-4" />
                     </span>
                     <div>
-                      <h4 className="text-sm font-bold text-white">ভিডিও থাম্বনেইল ইমেজ (Video Thumbnail)</h4>
-                      <p className="text-[11px] text-neutral-400">গ্যালারি থেকে ফটো আপলোড করুন অথবা ভিডিওর ফ্রেম থেকে অটো-ক্যাপচার করুন</p>
+                      <h4 className="text-sm font-bold text-white">পোস্টের ইমেজ / থাম্বনেইল আপলোড (Poster Image) *</h4>
+                      <p className="text-[11px] text-neutral-400">ফোন বা কম্পিউটারের গ্যালারি থেকে ছবি আপলোড করুন অথবা ছবির লিঙ্ক দিন</p>
                     </div>
                   </div>
 
@@ -1978,7 +1824,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       onClick={() => setThumbSourceMode('gallery')}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                         thumbSourceMode === 'gallery'
-                          ? 'bg-amber-500 text-neutral-950 shadow'
+                          ? 'bg-rose-600 text-white shadow'
                           : 'text-neutral-400 hover:text-white'
                       }`}
                     >
@@ -1990,7 +1836,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       onClick={() => setThumbSourceMode('url')}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                         thumbSourceMode === 'url'
-                          ? 'bg-amber-500 text-neutral-950 shadow'
+                          ? 'bg-rose-600 text-white shadow'
                           : 'text-neutral-400 hover:text-white'
                       }`}
                     >
@@ -2001,9 +1847,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                  {/* Thumbnail Preview Card */}
+                  {/* Image Preview */}
                   <div className="sm:col-span-5">
-                    <div className="relative rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 aspect-video shadow-md group">
+                    <div className="relative rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 aspect-video shadow-md group flex items-center justify-center">
                       {newVideo.thumbnail ? (
                         <img
                           src={newVideo.thumbnail}
@@ -2012,17 +1858,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-neutral-500 p-4 text-center">
-                          <ImageIcon className="w-8 h-8 mb-1" />
-                          <span className="text-xs">কোন থাম্বনেইল নির্বাচন করা হয়নি</span>
+                          <ImageIcon className="w-8 h-8 mb-1 text-neutral-600" />
+                          <span className="text-xs">ছবি নির্বাচন করুন</span>
                         </div>
                       )}
                       <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] text-white font-bold">
-                        প্রিভিউ
+                        লাইভ প্রিভিউ
                       </div>
                     </div>
                   </div>
 
-                  {/* Thumbnail Controls */}
+                  {/* Image Controls */}
                   <div className="sm:col-span-7 space-y-3">
                     <input
                       ref={thumbFileInputRef}
@@ -2037,37 +1883,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     />
 
                     {thumbSourceMode === 'gallery' ? (
-                      <div className="space-y-2">
-                        <button
-                          type="button"
-                          onClick={() => thumbFileInputRef.current?.click()}
-                          className="w-full py-3 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-850 border border-neutral-750 hover:border-amber-500/60 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow"
-                        >
-                          <Upload className="w-4 h-4 text-amber-400" />
-                          <span>গ্যালারি থেকে থাম্বনেইল ফটো নির্বাচন করুন</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleCaptureVideoFrame}
-                          disabled={!selectedVideoFile && !newVideo.videoUrl}
-                          className="w-full py-2.5 px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-semibold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Camera className="w-4 h-4 text-amber-400" />
-                          <span>{isCapturingThumb ? 'ক্যাপচার হচ্ছে...' : '🎬 বর্তমান ভিডিও থেকে ফ্রেম ক্যাপচার করুন'}</span>
-                        </button>
+                      <div
+                        onClick={() => thumbFileInputRef.current?.click()}
+                        className="border-2 border-dashed border-neutral-750 hover:border-rose-500/80 bg-neutral-900/60 hover:bg-neutral-900 rounded-2xl p-5 text-center cursor-pointer transition-all group"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-rose-600/10 text-rose-500 border border-rose-600/30 flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform">
+                          <Upload className="w-5 h-5" />
+                        </div>
+                        <h5 className="text-xs sm:text-sm font-bold text-white mb-1">
+                          গ্যালারি থেকে ফটো আপলোড করুন
+                        </h5>
+                        <p className="text-[11px] text-neutral-400">
+                          JPG, PNG, WebP ইত্যাদি ইমেজ ফরম্যাট
+                        </p>
                       </div>
                     ) : (
                       <div>
                         <label className="block text-xs font-bold text-neutral-300 mb-1.5">
-                          থাম্বনেইল ছবির অনলাইন URL:
+                          অনলাইন ছবির সরাসরি লিঙ্ক (Direct Image URL):
                         </label>
                         <input
                           type="url"
                           value={newVideo.thumbnail || ''}
                           onChange={(e) => setNewVideo({ ...newVideo, thumbnail: e.target.value })}
                           placeholder="https://images.unsplash.com/photo-..."
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-sm text-white focus:outline-none focus:border-rose-500 font-mono"
                         />
                       </div>
                     )}
@@ -2075,23 +1915,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
-              {/* TITLE & DETAILS */}
+              {/* POST TITLE & DETAILS */}
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-neutral-300 mb-1.5">
-                    ভিডিওর শিরোনাম (Video Title) *
+                    পোস্টের শিরোনাম (Post Title) *
                   </label>
                   <input
                     type="text"
                     required
                     value={newVideo.title || ''}
                     onChange={(e) => setNewVideo({ ...newVideo, title: e.target.value })}
-                    placeholder="যেমন: 🔥 ফেসবুকে তুমুল ভাইরাল হওয়া নতুন মজার ভিডিওটি একবার হলেও দেখুন!"
+                    placeholder="যেমন: 🔥 ফেসবুকে তুমুল ভাইরাল হওয়া নতুন ভিডিওটি দেখতে ক্লিক করুন!"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-sm text-white focus:outline-none focus:border-rose-500 font-semibold"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-neutral-300 mb-1.5">
                       ক্যাটাগরি
@@ -2101,26 +1941,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       onChange={(e) => setNewVideo({ ...newVideo, category: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-sm text-white focus:outline-none focus:border-rose-500"
                     >
-                      <option value="😂 ফানি ভিডিও">😂 ফানি ভিডিও</option>
-                      <option value="💥 ব্রেকিং নিউজ">💥 ব্রেকিং নিউজ</option>
-                      <option value="🎬 নাটক ও মুভি">🎬 নাটক ও মুভি</option>
-                      <option value="📱 রিলস ও শর্টস">📱 রিলস ও শর্টস</option>
-                      <option value="🏏 খেলাধুলা">🏏 খেলাধুলা</option>
-                      <option value="🎵 ভাইরাল গান">🎵 ভাইরাল গান</option>
+                      <option value="🇧🇩 বাংলাদেশি ভিডিও">🇧🇩 বাংলাদেশি ভিডিও</option>
+                      <option value="💃 ইন্ডিয়ান বৌদি ভিডিও">💃 ইন্ডিয়ান বৌদি ভিডিও</option>
+                      <option value="🇨🇳 চায়না ভিডিও">🇨🇳 চায়না ভিডিও</option>
+                      <option value="🇸🇦 সৌদি আরব ভিডিও">🇸🇦 সৌদি আরব ভিডিও</option>
+                      <option value="🔥 ভাইরাল ভিডিও">🔥 ভাইরাল ভিডিও</option>
+                      <option value="🎬 স্পেশাল ভিডিও">🎬 স্পেশাল ভিডিও</option>
                     </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-300 mb-1.5">
-                      ভিডিওর দৈর্ঘ্য (Duration যেমন 04:20)
-                    </label>
-                    <input
-                      type="text"
-                      value={newVideo.duration || '03:45'}
-                      onChange={(e) => setNewVideo({ ...newVideo, duration: e.target.value })}
-                      placeholder="03:45"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-sm text-white focus:outline-none focus:border-rose-500"
-                    />
                   </div>
 
                   <div>
@@ -2129,58 +1956,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </label>
                     <input
                       type="text"
-                      value={newVideo.uploaderName || 'অ্যাডমিন'}
+                      value={newVideo.uploaderName || 'অফিসিয়াল টিম'}
                       onChange={(e) => setNewVideo({ ...newVideo, uploaderName: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-sm text-white focus:outline-none focus:border-rose-500"
                     />
                   </div>
                 </div>
 
+                {/* TARGET FULL VIDEO / TELEGRAM LINK */}
+                <div className="p-4 rounded-2xl bg-neutral-950 border border-sky-500/40 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-sky-500/20 text-sky-400 rounded-lg">
+                      <Send className="w-4 h-4" />
+                    </span>
+                    <label className="block text-xs font-bold text-sky-400">
+                      ফুল ভিডিও / টেলিগ্রাম চ্যানেল লিংক (Target Link - ২০ সে. অ্যাড দেখার পর ওপেন হবে) *
+                    </label>
+                  </div>
+                  <input
+                    type="url"
+                    value={newVideo.directDownloadLink || newVideo.videoUrl || 'https://t.me/+6WMf5P3PMaowZjk1'}
+                    onChange={(e) => setNewVideo({ ...newVideo, directDownloadLink: e.target.value, videoUrl: e.target.value })}
+                    placeholder="https://t.me/+6WMf5P3PMaowZjk1"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-sm text-white focus:outline-none focus:border-sky-500 font-mono"
+                  />
+                  <p className="text-[11px] text-neutral-400">
+                    💡 ইউজার ২০ সেকেন্ড অ্যাড দেখার পর "এখন ভিডিও দেখুন" বাটনে চাপলে এই লিংকে নিয়ে যাবে।
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-neutral-300 mb-1.5">
-                    ভিডিওর বিবরণ (Description)
+                    পোস্টের বিবরণ (Description)
                   </label>
                   <textarea
                     rows={2}
                     value={newVideo.description || ''}
                     onChange={(e) => setNewVideo({ ...newVideo, description: e.target.value })}
-                    placeholder="আজকের ভাইরাল ঘটনার ভিডিও..."
+                    placeholder="সম্পূর্ণ আসল ভিডিওটি দেখতে ২০ সেকেন্ড অ্যাড দেখুন..."
                     className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-sm text-white focus:outline-none focus:border-rose-500"
                   />
                 </div>
 
-                {/* 7-Second Ad Gate Toggle for this video */}
-                <div className="p-4 rounded-2xl bg-neutral-950 border border-amber-500/30 flex items-center justify-between gap-4">
-                  <div>
-                    <span className="text-sm font-bold text-white block">
-                      ⏱️ এই ভিডিওতে ৭ সেকেন্ড পর ২০ সেকেন্ড অ্যাড লক চালু থাকবে?
+                {/* 20-Second Ad Lock Notice */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-neutral-950 to-amber-950/40 border border-amber-500/40 flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-bold text-amber-300 flex items-center gap-1.5">
+                      <Lock className="w-4 h-4 text-amber-400" />
+                      <span>২০ সেকেন্ড অ্যাড লক সিস্টেম সক্রিয়</span>
                     </span>
-                    <span className="text-xs text-neutral-400">
-                      চালু রাখলে ইউজার ভিডিও দেখার ৭ম সেকেন্ডে বিজ্ঞাপন দেখতে বাধ্য হবে।
+                    <span className="text-xs text-neutral-400 block">
+                      ইমেজে ক্লিক করলে ফুল ভিডিও পেতে ইউজারকে ২০ সেকেন্ড বিজ্ঞাপন দেখতে হবে। এরপর ভিডিও আনলক হবে।
                     </span>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setNewVideo({ ...newVideo, midrollAdEnabled: !newVideo.midrollAdEnabled })}
-                    className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors ${
-                      newVideo.midrollAdEnabled ? 'bg-amber-500' : 'bg-neutral-700'
-                    }`}
-                  >
-                    <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      newVideo.midrollAdEnabled ? 'translate-x-6' : ''
-                    }`} />
-                  </button>
+                  <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black shrink-0">
+                    ২০ সে. লক
+                  </span>
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={isProcessingVideo}
-                className="w-full py-3.5 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-black rounded-xl text-base flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 transition-all active:scale-95 disabled:opacity-60"
+                className="w-full py-4 bg-gradient-to-r from-rose-600 via-amber-600 to-rose-700 hover:from-rose-500 hover:to-amber-500 text-white font-black rounded-2xl text-base flex items-center justify-center gap-2 shadow-xl shadow-rose-900/40 transition-all active:scale-95 disabled:opacity-60 cursor-pointer"
               >
                 {editingVideoId ? <Save className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                <span>{editingVideoId ? 'ভিডিও আপডেট সেভ করুন' : 'ভিডিও সাইটে পাবলিশ করুন'}</span>
+                <span>{editingVideoId ? 'পোস্ট আপডেট সেভ করুন' : '🚀 পোস্টটি সাইটে পাবলিশ করুন'}</span>
               </button>
             </form>
           </div>
