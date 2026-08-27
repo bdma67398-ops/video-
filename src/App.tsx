@@ -25,14 +25,15 @@ import {
   deleteVideoFromCloud,
   saveAdConfigToCloud,
   saveSiteSettingsToCloud,
-  incrementVideoViewsInCloud
+  incrementVideoViewsInCloud,
+  normalizeVideoCategory
 } from './firebase';
 
 const STORAGE_KEYS = {
-  VIDEOS: 'viral_video_videos_v1',
-  AD_CONFIG: 'viral_video_ads_v1',
-  ANALYTICS: 'viral_video_analytics_v1',
-  SITE_SETTINGS: 'viral_video_settings_v1'
+  VIDEOS: 'viral_video_videos_v3',
+  AD_CONFIG: 'viral_video_ads_v3',
+  ANALYTICS: 'viral_video_analytics_v3',
+  SITE_SETTINGS: 'viral_video_settings_v3'
 };
 
 export default function App() {
@@ -40,9 +41,10 @@ export default function App() {
   const [videos, setVideos] = useState<Video[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.VIDEOS);
-      return saved ? JSON.parse(saved) : INITIAL_VIDEOS;
+      const list: Video[] = saved ? JSON.parse(saved) : INITIAL_VIDEOS;
+      return list.map(normalizeVideoCategory);
     } catch {
-      return INITIAL_VIDEOS;
+      return INITIAL_VIDEOS.map(normalizeVideoCategory);
     }
   });
 

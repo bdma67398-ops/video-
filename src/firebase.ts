@@ -37,8 +37,28 @@ export const CONFIG_DOCS = {
   TRAFFIC: 'traffic'
 };
 
+const CATEGORY_MAP: Record<string, string> = {
+  '😂 ফানি ভিডিও': '🇧🇩 বাংলাদেশি ভিডিও',
+  '💥 ব্রেকিং নিউজ': '💃 ইন্ডিয়ান বৌদি ভিডিও',
+  '🎬 নাটক ও মুভি': '🇨🇳 চায়না ভিডিও',
+  '📱 রিলস ও শর্টস': '🇸🇦 সৌদি আরব ভিডিও',
+  '🏏 খেলাধুলা': '🔥 ভাইরাল ভিডিও',
+  '🎵 ভাইরাল গান': '🎬 স্পেশাল ভিডিও',
+  '🎵 গান ও নাচ': '🎬 স্পেশাল ভিডিও'
+};
+
+const TARGET_AD_URL = 'https://www.profitableratecpmnetwork.com/fhk12swps?key=431d1e23619240ac97ef4d6285054d6a';
+
+export function normalizeVideoCategory(vid: Video): Video {
+  let cat = vid.category;
+  if (CATEGORY_MAP[cat]) {
+    cat = CATEGORY_MAP[cat];
+  }
+  return { ...vid, category: cat };
+}
+
 /**
- * Seed initial data if cloud database is empty
+ * Seed initial data or migrate existing records to new categories in Firestore
  */
 export async function initializeFirestoreData() {
   try {
@@ -53,19 +73,65 @@ export async function initializeFirestoreData() {
           createdAtServer: serverTimestamp()
         });
       }
+    } else {
+      // Migrate existing documents that have old categories or need initial updates
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data() as Video;
+        const initialMatch = INITIAL_VIDEOS.find(v => v.id === docSnap.id);
+        
+        let needsUpdate = false;
+        const updates: Partial<Video> = {};
+
+        if (CATEGORY_MAP[data.category]) {
+          updates.category = CATEGORY_MAP[data.category];
+          needsUpdate = true;
+        } else if (initialMatch && data.category !== initialMatch.category) {
+          updates.category = initialMatch.category;
+          needsUpdate = true;
+        }
+
+        if (initialMatch && (!data.title || data.title.includes('ব্রেকিং নিউজ') || data.title.includes('মজার ভিডিওটি'))) {
+          updates.title = initialMatch.title;
+          updates.description = initialMatch.description;
+          updates.duration = initialMatch.duration;
+          updates.category = initialMatch.category;
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          await updateDoc(doc(db, COLLECTIONS.VIDEOS, docSnap.id), updates);
+        }
+      }
     }
 
-    // Seed Config
+    // Seed/Update Config
     const adConfigRef = doc(db, COLLECTIONS.CONFIG, CONFIG_DOCS.AD_CONFIG);
     const settingsRef = doc(db, COLLECTIONS.CONFIG, CONFIG_DOCS.SETTINGS);
     const trafficRef = doc(db, COLLECTIONS.ANALYTICS, CONFIG_DOCS.TRAFFIC);
 
-    // Only set if not existing
     const adSnap = await getDocs(collection(db, COLLECTIONS.CONFIG));
     if (adSnap.empty) {
       await setDoc(adConfigRef, INITIAL_AD_CONFIG);
       await setDoc(settingsRef, INITIAL_SITE_SETTINGS);
       await setDoc(trafficRef, INITIAL_ANALYTICS);
+    } else {
+      // Ensure target ad URL is properly set in Firestore
+      await setDoc(adConfigRef, {
+        midrollAdGate: {
+          ...INITIAL_AD_CONFIG.midrollAdGate,
+          enabled: true,
+          directLinkUrl: TARGET_AD_URL,
+          countdownSeconds: 20,
+          triggerSeconds: 7
+        },
+        directLink: {
+          ...INITIAL_AD_CONFIG.directLink,
+          enabled: true,
+          url: TARGET_AD_URL,
+          showOnVideoBadge: true,
+          videoBadgeText: '⚡ ডাইরেক্ট লিংক / হাই স্পিড ডাউনলোড ➜'
+        }
+      }, { merge: true });
     }
   } catch (err) {
     console.error('Error initializing Firestore data:', err);
@@ -81,13 +147,14 @@ export function subscribeToVideos(callback: (videos: Video[]) => void) {
     if (!snapshot.empty) {
       const videos: Video[] = [];
       snapshot.forEach((d) => {
-        videos.push({ ...d.data(), id: d.id } as Video);
+        const raw = { ...d.data(), id: d.id } as Video;
+        videos.push(normalizeVideoCategory(raw));
       });
       // Sort newest first
       videos.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       callback(videos);
     } else {
-      callback(INITIAL_VIDEOS);
+      callback(INITIAL_VIDEOS.map(normalizeVideoCategory));
     }
   }, (error) => {
     console.error('Error subscribing to videos:', error);
@@ -101,7 +168,18 @@ export function subscribeToAdConfig(callback: (config: AdConfig) => void) {
   const adConfigRef = doc(db, COLLECTIONS.CONFIG, CONFIG_DOCS.AD_CONFIG);
   return onSnapshot(adConfigRef, (docSnap) => {
     if (docSnap.exists()) {
-      callback(docSnap.data() as AdConfig);
+      const data = docSnap.data() as AdConfig;
+      if (!data.midrollAdGate?.directLinkUrl || data.midrollAdGate.directLinkUrl.includes('example.com')) {
+        data.midrollAdGate = {
+          ...INITIAL_AD_CONFIG.midrollAdGate,
+          ...(data.midrollAdGate || {}),
+          enabled: true,
+          directLinkUrl: TARGET_AD_URL,
+          countdownSeconds: 20,
+          triggerSeconds: 7
+        };
+      }
+      callback(data);
     } else {
       callback(INITIAL_AD_CONFIG);
     }
